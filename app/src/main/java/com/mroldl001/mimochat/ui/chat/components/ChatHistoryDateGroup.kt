@@ -5,9 +5,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.mroldl001.mimochat.R
 import com.mroldl001.mimochat.domain.model.Chat
 import java.time.Instant
 import java.time.LocalDate
@@ -24,11 +27,40 @@ sealed interface ChatHistoryEntry {
     }
 }
 
-fun buildChatHistoryEntries(chats: List<Chat>): List<ChatHistoryEntry> {
+fun buildChatHistoryEntries(
+    chats: List<Chat>,
+    todayLabel: String,
+    weekLabel: String,
+    olderLabel: String
+): List<ChatHistoryEntry> = groupChats(
+    chats,
+    todayLabel,
+    weekLabel,
+    olderLabel,
+    ZoneId.systemDefault(),
+    LocalDate.now()
+)
+
+@Composable
+internal fun rememberChatHistoryEntries(chats: List<Chat>): List<ChatHistoryEntry> {
+    val today = stringResource(R.string.history_group_today)
+    val week = stringResource(R.string.history_group_week)
+    val older = stringResource(R.string.history_group_older)
+    return remember(chats, today, week, older) {
+        buildChatHistoryEntries(chats, today, week, older)
+    }
+}
+
+private fun groupChats(
+    chats: List<Chat>,
+    todayLabel: String,
+    weekLabel: String,
+    olderLabel: String,
+    zoneId: ZoneId,
+    today: LocalDate
+): List<ChatHistoryEntry> {
     if (chats.isEmpty()) return emptyList()
-    val zoneId = ZoneId.systemDefault()
-    val today = LocalDate.now(zoneId)
-    val weekAgoInclusive = today.minusDays(7) // 7 天前当天也计入「最近一周」
+    val weekAgoInclusive = today.minusDays(7)
     val sorted = chats.sortedByDescending { it.updatedAt }
     val todayList = ArrayList<Chat>()
     val weekList = ArrayList<Chat>()
@@ -43,15 +75,15 @@ fun buildChatHistoryEntries(chats: List<Chat>): List<ChatHistoryEntry> {
     }
     val entries = ArrayList<ChatHistoryEntry>(sorted.size + 3)
     if (todayList.isNotEmpty()) {
-        entries += ChatHistoryEntry.Header("今天")
+        entries += ChatHistoryEntry.Header(todayLabel)
         todayList.forEach { entries += ChatHistoryEntry.Item(it) }
     }
     if (weekList.isNotEmpty()) {
-        entries += ChatHistoryEntry.Header("最近一周")
+        entries += ChatHistoryEntry.Header(weekLabel)
         weekList.forEach { entries += ChatHistoryEntry.Item(it) }
     }
     if (olderList.isNotEmpty()) {
-        entries += ChatHistoryEntry.Header("更早")
+        entries += ChatHistoryEntry.Header(olderLabel)
         olderList.forEach { entries += ChatHistoryEntry.Item(it) }
     }
     return entries

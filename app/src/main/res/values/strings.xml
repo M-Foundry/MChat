@@ -13,6 +13,34 @@
   <string name="theme_color">主题色彩</string>
   <string name="theme_default">墨白素笺</string>
   <string name="theme_custom">自定义色彩</string>
+  <string name="custom_color_hex_label">HEX 色值</string>
+  <string name="custom_color_hex_error">请输入 6 位十六进制颜色值</string>
+  <string name="history_group_today">今天</string>
+  <string name="history_group_week">最近一周</string>
+  <string name="history_group_older">更早</string>
+  <string name="time_yesterday">昨天 %1$s</string>
+  <string name="action_retry">重试</string>
+  <string name="action_edit">编辑</string>
+  <string name="action_send_failed">发送失败</string>
+  <string name="action_retry_send">点击重试</string>
+  <string name="notif_channel_title">MChat</string>
+  <string name="attachment_video">视频附件</string>
+  <string name="attachment_audio">音频附件</string>
+  <string name="attachment_audio_short">音频</string>
+  <string name="attachment_image">图片附件</string>
+  <string name="attachment_file">文件附件</string>
+  <string name="attachment_type_sheet">表格</string>
+  <string name="attachment_type_slides">演示文稿</string>
+  <string name="attachment_type_text">文本文件</string>
+  <string name="attachment_type_file">文件</string>
+  <string name="action_play">播放</string>
+  <string name="code_block">代码</string>
+  <string name="close_fullscreen">退出全屏</string>
+  <string name="code_fullscreen">全屏查看</string>
+  <string name="zoom_reset">重置缩放</string>
+  <string name="action_pause">暂停</string>
+  <string name="action_remove_attachment">移除附件</string>
+  <string name="loading_ellipsis">正在加载…</string>
   <string name="theme_auto_color">动态色彩</string>
   <string name="theme_miku_green">初音之籁</string>
   <string name="theme_teto_red">吉原哀歌</string>
@@ -78,7 +106,10 @@
   <string name="easter_egg_v2_0_desc">那个偏执狂依旧在更新 MIMO Chat，他将我迁移到了全新的 Android 16</string>
   <string name="easter_egg_v1_2_desc">闻起来就像青少年会干的事，闻起来就像优化了后台保活机制的 MIMO Chat</string>
   <string name="easter_egg_v1_0_desc">这或许会是一次伟大的远征！千里之行，始于足下</string>
-  <string name="easter_egg_v2_2_desc">选择主题，选择对话标题生成模型，选择删除，选择重试…</string>
+  <string name="easter_egg_v2_4_desc">选择主题，选择对话标题生成模型，选择删除，选择重试…</string>
+  <string name="easter_egg_override_desc">想在此处稍微改写，关于 MChat 的那些函数</string>
+  <string name="easter_egg_honeycomb_desc">"Designed from the ground up for tablets"</string>
+  <string name="egg_cover_of">%1$s 封面</string>
   <string name="easter_egg_sbr_desc">LESSON4: 表达敬意吧，表达出敬意，然后迈向 MChat 的另一个全新阶段</string>
   <string name="about_mchat">关于 MChat</string>
   <string name="about_mchat_desc">应用信息与声明</string>
@@ -91,13 +122,14 @@
 
   <!-- 更新弹窗 -->
   <string name="update_release_notes">发行版说明</string>
+  <string name="update_release_default_name">版本更新</string>
+  <string name="update_release_no_notes">此发行版没有提供说明。</string>
   <string name="download_and_install">下载并安装</string>
   <string name="common_cancel">取消</string>
 
   <!-- 横幅 -->
   <string name="banner_castle_desc">上传附件，打开相机，让 MChat 看到一座由全新 UI 与动效砌成的雄伟城堡</string>
   <string name="banner_cover_desc">Show me the castle 封面</string>
-  <string name="banner_trainspotting_cover_desc">Trainspotting 封面</string>
 
   <!-- 关于页 -->
   <string name="about_app_icon_desc">MChat 图标</string>
@@ -115,6 +147,10 @@
   <!-- 聊天 / 侧边栏 / 通用 -->
   <string name="chat_history">对话历史</string>
   <string name="new_chat">新对话</string>
+  <string name="title_source_image">图片对话</string>
+  <string name="title_source_video">视频对话</string>
+  <string name="title_source_audio">音频对话</string>
+  <string name="title_source_attachment">附件对话</string>
   <string name="no_chat_history">暂无对话记录</string>
   <string name="delete">删除</string>
   <string name="menu">菜单</string>

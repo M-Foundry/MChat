@@ -36,11 +36,9 @@ import android.media.SoundPool
 import com.mroldl001.mimochat.R
 import com.mroldl001.mimochat.ui.chat.components.BouncyWinkIcon
 import com.mroldl001.mimochat.ui.chat.components.SettingsContainerDialog
-import com.mroldl001.mimochat.ui.chat.components.SettingsTransition
 
 @Composable
 internal fun AboutDialog(
-    transition: SettingsTransition,
     onDismiss: () -> Unit,
     onDisclaimerClick: () -> Unit
 ) {
@@ -76,8 +74,6 @@ internal fun AboutDialog(
     }
 
     SettingsContainerDialog(
-        anchorBounds = Rect.Zero,
-        transition = transition,
         onDismissRequest = onDismiss,
         text = {
             Column(
@@ -148,7 +144,6 @@ internal fun AboutDialog(
 
     if (showOpenSource) {
         OpenSourceLibrariesDialog(
-            transition = transition,
             onDismiss = { showOpenSource = false }
         )
     }

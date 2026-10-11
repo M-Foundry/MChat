@@ -1,7 +1,6 @@
 package com.mroldl001.mimochat.ui.chat.components
 
 import android.graphics.Bitmap
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.compose.foundation.Image
@@ -54,10 +53,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.mroldl001.mimochat.R
 import com.mroldl001.mimochat.domain.model.MessageAttachment
+import com.mroldl001.mimochat.ui.util.MediaMeta
+import com.mroldl001.mimochat.ui.util.loadMediaMeta
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -85,24 +88,24 @@ internal fun AttachmentPreviewList(
         }
     }
 
-    val visualIndices = remember(attachments) {
+    val cardIndices = remember(attachments) {
         attachments.indices.filter {
             val mime = attachments[it].mimeType.orEmpty().lowercase()
-            mime.startsWith("image/") || mime.startsWith("video/")
+            mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/")
         }.toList()
     }
-    val visualSet = remember(visualIndices) { visualIndices.toSet() }
+    val cardSet = remember(cardIndices) { cardIndices.toSet() }
 
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        if (visualIndices.isNotEmpty()) {
+        if (cardIndices.isNotEmpty()) {
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                visualIndices.forEach { index ->
+                cardIndices.forEach { index ->
                     val att = attachments[index]
                     AnimatedVisibility(
                         visible = att.uri !in removingUris,
@@ -122,7 +125,7 @@ internal fun AttachmentPreviewList(
             }
         }
 
-        attachments.indices.filter { it !in visualSet }.forEach { index ->
+        attachments.indices.filter { it !in cardSet }.forEach { index ->
             val att = attachments[index]
             AnimatedVisibility(
                 visible = att.uri !in removingUris,
@@ -170,26 +173,6 @@ internal fun AttachmentPreview(
         }
     }
 
-    val audioDurationMs by produceState(initialValue = 0, uri, normalizedMimeType) {
-        value = if (normalizedMimeType.startsWith("audio/")) {
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    MediaMetadataRetriever().let { retriever ->
-                        try {
-                            retriever.setDataSource(context, Uri.parse(uri))
-                            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                                ?.toIntOrNull() ?: 0
-                        } finally {
-                            retriever.release()
-                        }
-                    }
-                }.getOrDefault(0)
-            }
-        } else {
-            0
-        }
-    }
-
     when {
         normalizedMimeType.startsWith("image/") -> VisualAttachmentPreview(
             compact = compact,
@@ -213,10 +196,9 @@ internal fun AttachmentPreview(
             modifier = modifier
         )
 
-        normalizedMimeType.startsWith("audio/") -> FileAttachmentPreview(
-            icon = { Icon(Icons.Outlined.AudioFile, contentDescription = null) },
-            title = resolvedLabel ?: "音频附件",
-            subtitle = if (audioDurationMs > 0) formatDuration(audioDurationMs) else "音频",
+        normalizedMimeType.startsWith("audio/") -> AudioAttachmentPreview(
+            uri = uri,
+            compact = compact,
             onClear = onClear,
             onClick = onClick,
             modifier = modifier
@@ -224,7 +206,7 @@ internal fun AttachmentPreview(
 
         else -> FileAttachmentPreview(
             icon = { Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null) },
-            title = resolvedLabel ?: "文件附件",
+            title = resolvedLabel ?: stringResource(R.string.attachment_file),
             subtitle = fileTypeLabel(normalizedMimeType, resolvedLabel),
             onClear = onClear,
             onClick = onClick,
@@ -277,35 +259,11 @@ private fun VideoAttachmentPreview(
     modifier: Modifier
 ) {
     val context = LocalContext.current
-    val thumbnail by produceState<Bitmap?>(initialValue = null, uri) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                MediaMetadataRetriever().let { retriever ->
-                    try {
-                        retriever.setDataSource(context, Uri.parse(uri))
-                        retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                    } finally {
-                        retriever.release()
-                    }
-                }
-            }.getOrNull()
-        }
+    val videoMeta by produceState(initialValue = MediaMeta(null, 0), uri) {
+        value = loadMediaMeta(context, uri)
     }
-    val durationMs by produceState(initialValue = 0, uri) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                MediaMetadataRetriever().let { retriever ->
-                    try {
-                        retriever.setDataSource(context, Uri.parse(uri))
-                        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                            ?.toIntOrNull() ?: 0
-                    } finally {
-                        retriever.release()
-                    }
-                }
-            }.getOrDefault(0)
-        }
-    }
+    val thumbnail = videoMeta.thumbnail
+    val durationMs = videoMeta.durationMs
 
     VisualAttachmentPreview(
         compact = compact,
@@ -313,17 +271,17 @@ private fun VideoAttachmentPreview(
         onClick = onClick,
         modifier = modifier
     ) {
-        if (thumbnail != null) {
+        thumbnail?.let {
             Image(
-                bitmap = thumbnail!!.asImageBitmap(),
-                contentDescription = "视频附件",
+                bitmap = it.asImageBitmap(),
+                contentDescription = stringResource(R.string.attachment_video),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-        } else {
+        } ?: run {
             Icon(
                 imageVector = Icons.Outlined.VideoFile,
-                contentDescription = "视频附件",
+                contentDescription = stringResource(R.string.attachment_video),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(36.dp)
             )
@@ -343,6 +301,51 @@ private fun VideoAttachmentPreview(
                 )
             }
         }
+        if (durationMs > 0) {
+            Surface(
+                color = Color.Black.copy(alpha = 0.55f),
+                contentColor = Color.White,
+                shape = RoundedCornerShape(5.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(4.dp)
+            ) {
+                Text(
+                    text = formatDuration(durationMs),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioAttachmentPreview(
+    uri: String,
+    compact: Boolean,
+    onClear: (() -> Unit)?,
+    onClick: (() -> Unit)?,
+    modifier: Modifier
+) {
+    val context = LocalContext.current
+    val audioMeta by produceState(initialValue = MediaMeta(null, 0), uri) {
+        value = loadMediaMeta(context, uri)
+    }
+    val durationMs = audioMeta.durationMs
+
+    VisualAttachmentPreview(
+        compact = compact,
+        onClear = onClear,
+        onClick = onClick,
+        modifier = modifier
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.AudioFile,
+            contentDescription = stringResource(R.string.attachment_audio),
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(if (compact) 36.dp else 44.dp)
+        )
         if (durationMs > 0) {
             Surface(
                 color = Color.Black.copy(alpha = 0.55f),
@@ -422,19 +425,19 @@ private fun FileAttachmentPreview(
     }
 }
 
+@Composable
 private fun fileTypeLabel(mimeType: String, fileName: String?): String {
     return when {
-        mimeType == "application/pdf" -> "PDF 文档"
-        mimeType.contains("word") -> "Word 文档"
-        mimeType.contains("sheet") || mimeType.contains("excel") -> "表格"
-        mimeType.contains("presentation") || mimeType.contains("powerpoint") -> "演示文稿"
-        mimeType.startsWith("text/") -> "文本文件"
+        mimeType == "application/pdf" -> "PDF"
+        mimeType.contains("word") -> "Word"
+        mimeType.contains("sheet") || mimeType.contains("excel") -> stringResource(R.string.attachment_type_sheet)
+        mimeType.contains("presentation") || mimeType.contains("powerpoint") -> stringResource(R.string.attachment_type_slides)
+        mimeType.startsWith("text/") -> stringResource(R.string.attachment_type_text)
         else -> fileName
             ?.substringAfterLast('.', missingDelimiterValue = "")
             ?.takeIf { it.isNotBlank() }
             ?.uppercase()
-            ?.let { "$it 文件" }
-            ?: "文件"
+            ?: stringResource(R.string.attachment_type_file)
     }
 }
 
@@ -452,7 +455,7 @@ private fun BoxScope.ClearAttachmentButton(onClear: (() -> Unit)?) {
         IconButton(onClick = onClear, modifier = Modifier.size(28.dp)) {
             Icon(
                 imageVector = Icons.Default.Close,
-                contentDescription = "移除附件",
+                contentDescription = stringResource(R.string.action_remove_attachment),
                 modifier = Modifier.size(18.dp)
             )
         }

@@ -89,19 +89,8 @@ fun AdaptiveChatLayout(
     onThemeChanged: (ThemeColor, ThemeMode) -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onApiKeySaved: (String) -> Unit,
-    onApiBaseUrlSaved: (String) -> Unit,
-    onCustomPromptSaved: (String) -> Unit,
     chatBackgroundUri: String?,
     chatBackgroundOpacity: Float,
-    onSelectBackgroundImage: () -> Unit,
-    onBackgroundOpacityChanged: (Float) -> Unit,
-    onRestoreBackgroundDefault: () -> Unit,
-    onTemperatureSaved: (Float) -> Unit,
-    onTopPSaved: (Float) -> Unit,
-    onFrequencyPenaltySaved: (Float) -> Unit,
-    onPresencePenaltySaved: (Float) -> Unit,
-    onResetParameters: () -> Unit,
     onCheckForUpdate: () -> Unit,
     onAcceptPrereleaseUpdatesChanged: (Boolean) -> Unit,
     onDownloadUpdate: (com.mroldl001.mimochat.data.update.GitHubRelease) -> Unit,
@@ -152,22 +141,11 @@ fun AdaptiveChatLayout(
     val bottomProximityPx = with(LocalDensity.current) { 120.dp.roundToPx() }
     val scrollButtonTravelPx = with(LocalDensity.current) { 76.dp.roundToPx() }
 
-    var settingsAnchorBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
-    val settingsPageTransition = rememberSettingsTransition()
-    var showApiKeyDialog by remember { mutableStateOf(false) }
-    var showApiBaseUrlDialog by remember { mutableStateOf(false) }
-    var showCustomPromptDialog by remember { mutableStateOf(false) }
-    var showParameterSettingsDialog by remember { mutableStateOf(false) }
-    var showBackgroundSettingsDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showApiKeyWarningDialog by remember { mutableStateOf(false) }
-    
+
     var chatToDelete by remember { mutableStateOf<Chat?>(null) }
-    
-    var currentApiKey by remember { mutableStateOf("") }
-    var currentApiBaseUrl by remember { mutableStateOf("") }
-    var currentCustomPrompt by remember { mutableStateOf("") }
-    
+
     var pendingRestoreChatId by remember { mutableStateOf(uiState.currentChat?.id) }
     var pendingInitialTopChatId by remember(initialChatId, suppressInitialScroll) {
         mutableStateOf(initialChatId.takeIf { suppressInitialScroll })
@@ -358,7 +336,6 @@ fun AdaptiveChatLayout(
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     ChatHistoryHeader(
-                        onSettingsBoundsChanged = { settingsAnchorBounds = it },
                         onSearchClick = {
                             clearInputFocus()
                             onNavigateToSearch()
@@ -395,7 +372,7 @@ fun AdaptiveChatLayout(
                         .weight(1f)
                         .clipToBounds()
                 ) {
-                            val historyEntries = remember(uiState.chats) { buildChatHistoryEntries(uiState.chats) }
+                            val historyEntries = rememberChatHistoryEntries(uiState.chats)
                             val selectedHistoryIndex = historyEntries.indexOfFirst {
                                 it is ChatHistoryEntry.Item && it.chat.id == uiState.currentChat?.id
                             }
@@ -414,7 +391,7 @@ fun AdaptiveChatLayout(
                                 items(historyEntries, key = { it.key }) { entry ->
                                     when (entry) {
                                         is ChatHistoryEntry.Header -> ChatListDateHeader(entry.title)
-                                        is ChatHistoryEntry.Item -> TabletChatListItem(
+                                        is ChatHistoryEntry.Item -> ChatListItem(
                                             chat = entry.chat,
                                             isSelected = entry.chat.id == uiState.currentChat?.id,
                                             settledSelectedChatId = settledChatId.value,
@@ -557,7 +534,7 @@ fun AdaptiveChatLayout(
                 }
 
                 if (messages.isEmpty() && !isStreaming) {
-                    TabletEmptyState(
+                    ChatEmptyState(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 } else {
@@ -661,46 +638,6 @@ fun AdaptiveChatLayout(
         )
     }
 
-    if (showBackgroundSettingsDialog) {
-        BackgroundImageSettingsDialog(
-            hasBackgroundImage = !chatBackgroundUri.isNullOrBlank(),
-            opacity = chatBackgroundOpacity,
-            onSelectImage = onSelectBackgroundImage,
-            onOpacityChanged = onBackgroundOpacityChanged,
-            onRestoreDefault = onRestoreBackgroundDefault,
-            anchorBounds = settingsAnchorBounds,
-            transition = settingsPageTransition,
-            onDismiss = { settingsPageTransition.close { showBackgroundSettingsDialog = false } }
-        )
-    }
-
-    if (showParameterSettingsDialog) {
-        TabletParameterSettingsDialog(
-            initialTemperature = uiState.temperature,
-            initialTopP = uiState.topP,
-            initialFrequencyPenalty = uiState.frequencyPenalty,
-            initialPresencePenalty = uiState.presencePenalty,
-            anchorBounds = settingsAnchorBounds,
-            transition = settingsPageTransition,
-            onDismiss = { settingsPageTransition.close { showParameterSettingsDialog = false } },
-            onConfirm = { temp, topP, freqPenalty, presPenalty ->
-                settingsPageTransition.close {
-                    onTemperatureSaved(temp)
-                    onTopPSaved(topP)
-                    onFrequencyPenaltySaved(freqPenalty)
-                    onPresencePenaltySaved(presPenalty)
-                    showParameterSettingsDialog = false
-                }
-            },
-            onReset = {
-                settingsPageTransition.close {
-                    onResetParameters()
-                    showParameterSettingsDialog = false
-                }
-            }
-        )
-    }
-    
     if (showApiKeyWarningDialog) {
         AlertDialog(
             onDismissRequest = { showApiKeyWarningDialog = false },
@@ -709,54 +646,6 @@ fun AdaptiveChatLayout(
             confirmButton = {
                 TextButton(onClick = { showApiKeyWarningDialog = false }) {
                     Text(stringResource(R.string.ok))
-                }
-            }
-        )
-    }
-    
-    if (showApiKeyDialog) {
-        TabletApiKeyDialog(
-            currentKey = currentApiKey.ifEmpty { uiState.apiKey },
-            anchorBounds = settingsAnchorBounds,
-            transition = settingsPageTransition,
-            onDismiss = { settingsPageTransition.close { showApiKeyDialog = false } },
-            onConfirm = { key ->
-                settingsPageTransition.close {
-                    currentApiKey = key
-                    onApiKeySaved(key)
-                    showApiKeyDialog = false
-                }
-            }
-        )
-    }
-    
-    if (showApiBaseUrlDialog) {
-        ApiBaseUrlDialog(
-            currentUrl = currentApiBaseUrl.ifEmpty { uiState.apiBaseUrl },
-            anchorBounds = settingsAnchorBounds,
-            transition = settingsPageTransition,
-            onDismiss = { settingsPageTransition.close { showApiBaseUrlDialog = false } },
-            onConfirm = { url ->
-                settingsPageTransition.close {
-                    currentApiBaseUrl = url
-                    onApiBaseUrlSaved(url)
-                    showApiBaseUrlDialog = false
-                }
-            }
-        )
-    }
-    
-    if (showCustomPromptDialog) {
-        TabletCustomSystemPromptDialog(
-            currentPrompt = currentCustomPrompt.ifEmpty { uiState.customSystemPrompt },
-            anchorBounds = settingsAnchorBounds,
-            transition = settingsPageTransition,
-            onDismiss = { settingsPageTransition.close { showCustomPromptDialog = false } },
-            onConfirm = { prompt ->
-                settingsPageTransition.close {
-                    currentCustomPrompt = prompt
-                    onCustomPromptSaved(prompt)
-                    showCustomPromptDialog = false
                 }
             }
         )

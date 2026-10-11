@@ -38,8 +38,6 @@ private const val SubscriptionApiUrl = "https://token-plan-cn.xiaomimimo.com"
 @Composable
 internal fun ApiBaseUrlDialog(
     currentUrl: String,
-    anchorBounds: Rect,
-    transition: SettingsTransition,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {

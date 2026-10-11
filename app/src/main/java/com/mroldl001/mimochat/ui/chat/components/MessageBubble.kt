@@ -18,19 +18,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.util.TypedValue
 import android.view.Gravity
 import android.widget.TextView
+import com.mroldl001.mimochat.R
 import com.mroldl001.mimochat.domain.model.Message
-import java.text.SimpleDateFormat
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
-import java.util.Date
-import java.util.Locale
+import com.mroldl001.mimochat.ui.util.formatBubbleTimestamp
 
 @Composable
 fun MessageBubble(
@@ -42,6 +39,7 @@ fun MessageBubble(
     onAttachmentClick: ((Int) -> Unit)? = null
 ) {
     val isUser = message.role == "user"
+    val yesterdayTemplate = stringResource(R.string.time_yesterday)
     val alignment = if (isUser) Alignment.End else Alignment.Start
     val hasThinking = !isUser && !message.reasoningContent.isNullOrBlank()
 
@@ -59,7 +57,7 @@ fun MessageBubble(
                 if (isLatest) {
                     Icon(
                         imageVector = Icons.Outlined.Replay,
-                        contentDescription = "点击重试",
+                        contentDescription = stringResource(R.string.action_retry_send),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .size(20.dp)
@@ -68,7 +66,7 @@ fun MessageBubble(
                 } else {
                     Icon(
                         imageVector = Icons.Outlined.ErrorOutline,
-                        contentDescription = "发送失败",
+                        contentDescription = stringResource(R.string.action_send_failed),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
@@ -142,9 +140,9 @@ fun MessageBubble(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.Start
                 ) {
-                    if (hasThinking) {
+                    message.reasoningContent?.takeIf { it.isNotBlank() }?.let { reasoning ->
                         ThinkingCard(
-                            reasoningContent = message.reasoningContent!!,
+                            reasoningContent = reasoning,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                     }
@@ -186,7 +184,7 @@ fun MessageBubble(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Outlined.Replay,
-                                        contentDescription = "重试",
+                                        contentDescription = stringResource(R.string.action_retry),
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(18.dp).offset(x = (-7).dp)
                                     )
@@ -197,7 +195,7 @@ fun MessageBubble(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Edit,
-                                        contentDescription = "编辑",
+                                        contentDescription = stringResource(R.string.action_edit),
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(18.dp).offset(x = (-7).dp)
                                     )
@@ -205,7 +203,7 @@ fun MessageBubble(
                             }
                         }
                         Text(
-                            text = formatTimestamp(message.timestamp),
+                            text = formatBubbleTimestamp(message.timestamp, yesterdayTemplate),
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
                             modifier = Modifier.align(Alignment.CenterVertically)
@@ -214,18 +212,5 @@ fun MessageBubble(
                 }
             }
         }
-    }
-}
-
-private fun formatTimestamp(timestamp: Long): String {
-    val date = Instant.ofEpochMilli(timestamp)
-        .atZone(ZoneId.systemDefault())
-        .toLocalDate()
-    val today = LocalDate.now()
-    val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
-    return when {
-        date == today -> time
-        date == today.minusDays(1) -> "昨天 $time"
-        else -> SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(timestamp))
     }
 }

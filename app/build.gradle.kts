@@ -14,8 +14,8 @@ android {
         applicationId = "com.mroldl001.mimochat"
         minSdk = 26
         targetSdk = 36
-        versionCode = 233
-        versionName = "2.3.3-Trainspotting"
+        versionCode = 240
+        versionName = "2.4.0-Override"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -48,9 +48,6 @@ android {
 
 configurations.all {
     resolutionStrategy {
-        // compose-markdown (jitpack) 等传递依赖用 strictly 把 navigation-compose 钉在 2.5.1，
-        // 会覆盖下方声明的 2.8.4，导致 composable 缺少 enterTransition 等参数、预测性返回失效。
-        // 项目级 force 优先于依赖级 strictly，固定到 2.8.4。
         force("androidx.navigation:navigation-compose:2.8.4")
     }
 }
@@ -83,12 +80,16 @@ dependencies {
     
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     
-    implementation("com.google.code.gson:gson:2.10.1")
+implementation("com.google.code.gson:gson:2.10.1")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("io.github.panpf.zoomimage:zoomimage-compose-coil2:1.2.0")
+    implementation("androidx.media3:media3-exoplayer:1.9.4")
+    implementation("androidx.media3:media3-ui:1.9.4")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     implementation("com.github.jeziellago:compose-markdown:0.7.2")
     implementation("io.noties.markwon:core:4.6.2")
+    implementation("io.github.ivan-magda:kotlin-textmate-core:0.3.0")
     implementation(project(":latexlibrary"))
     
     testImplementation("junit:junit:4.13.2")

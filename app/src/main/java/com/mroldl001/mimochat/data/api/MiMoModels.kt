@@ -25,25 +25,11 @@ data class ChatCompletionRequest(
 
 data class ToolConfig(
     val type: String,
-    val function: FunctionConfig? = null,
     @SerializedName("max_keyword")
     val maxKeyword: Int? = null,
     @SerializedName("force_search")
     val forceSearch: Boolean? = null,
-    val limit: Int? = null,
-    @SerializedName("user_location")
-    val userLocation: UserLocation? = null
-)
-
-data class FunctionConfig(
-    val name: String
-)
-
-data class UserLocation(
-    val type: String,
-    val country: String? = null,
-    val region: String? = null,
-    val city: String? = null
+    val limit: Int? = null
 )
 
 data class MessageRequest(

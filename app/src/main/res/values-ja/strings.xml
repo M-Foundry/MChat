@@ -13,6 +13,34 @@
   <string name="theme_color">テーマカラー</string>
   <string name="theme_default">墨白素箋</string>
   <string name="theme_custom">カスタムカラー</string>
+  <string name="custom_color_hex_label">HEX 値</string>
+  <string name="custom_color_hex_error">6 桁の16進カラーコードを入力してください</string>
+  <string name="history_group_today">今日</string>
+  <string name="history_group_week">過去 7 日間</string>
+  <string name="history_group_older">それ以前</string>
+  <string name="time_yesterday">昨日 %1$s</string>
+  <string name="action_retry">再試行</string>
+  <string name="action_edit">編集</string>
+  <string name="action_send_failed">送信に失敗しました</string>
+  <string name="action_retry_send">タップして再試行</string>
+  <string name="notif_channel_title">MChat</string>
+  <string name="attachment_video">動画添付</string>
+  <string name="attachment_audio">音声添付</string>
+  <string name="attachment_audio_short">音声</string>
+  <string name="attachment_image">画像添付</string>
+  <string name="attachment_file">ファイル添付</string>
+  <string name="attachment_type_sheet">表計算</string>
+  <string name="attachment_type_slides">プレゼンテーション</string>
+  <string name="attachment_type_text">テキストファイル</string>
+  <string name="attachment_type_file">ファイル</string>
+  <string name="action_play">再生</string>
+  <string name="code_block">コード</string>
+  <string name="close_fullscreen">全画面を閉じる</string>
+  <string name="code_fullscreen">全画面表示</string>
+  <string name="zoom_reset">ズームをリセット</string>
+  <string name="action_pause">一時停止</string>
+  <string name="action_remove_attachment">添付を削除</string>
+  <string name="loading_ellipsis">読み込み中…</string>
   <string name="theme_auto_color">ダイナミックカラー</string>
   <string name="theme_miku_green">初音の調べ</string>
   <string name="theme_teto_red">吉原ラメント</string>
@@ -78,7 +106,10 @@
   <string name="easter_egg_v2_0_desc">その偏執狂は今も MIMO Chat を更新し続けている。彼は私を全く新しい Android 16 へと移行させた</string>
   <string name="easter_egg_v1_2_desc">まるでティーンエイジャーがやりそうなことのようだ。バックグラウンドの生存維持を最適化した MIMO Chat のようだ</string>
   <string name="easter_egg_v1_0_desc">これはきっと素晴らしい遠征になるだろう！千里の道も一歩から</string>
-  <string name="easter_egg_v2_2_desc">テーマを選べ。会話タイトル生成モデルを選べ。削除を選べ。リトライを選べ…</string>
+  <string name="easter_egg_v2_4_desc">テーマを選べ。会話タイトル生成モデルを選べ。削除を選べ。リトライを選べ…</string>
+  <string name="easter_egg_override_desc">MChat のあの関数を，少々ここらでオーバーライド</string>
+  <string name="easter_egg_honeycomb_desc">"Designed from the ground up for tablets"</string>
+  <string name="egg_cover_of">%1$s の表紙</string>
   <string name="easter_egg_sbr_desc">LESSON4：敬意を払え、敬意を払え、そしてMChatの新たな段階へ</string>
   <string name="about_mchat">MChat について</string>
   <string name="about_mchat_desc">アプリ情報と告知</string>
@@ -91,13 +122,14 @@
 
   <!-- 更新ダイアログ -->
   <string name="update_release_notes">リリースノート</string>
+  <string name="update_release_default_name">バージョン更新</string>
+  <string name="update_release_no_notes">このリリースには説明がありません。</string>
   <string name="download_and_install">ダウンロードしてインストール</string>
   <string name="common_cancel">キャンセル</string>
 
   <!-- バナー -->
   <string name="banner_castle_desc">ファイルを添付し、カメラを開き、MChat に全新 UI とモーションで築かれた雄大な城を見せてください</string>
   <string name="banner_cover_desc">Show me the castle のカバー</string>
-  <string name="banner_trainspotting_cover_desc">Trainspotting のカバー</string>
 
   <!-- 約について -->
   <string name="about_app_icon_desc">MChat アイコン</string>
@@ -115,6 +147,10 @@
   <!-- チャット / サイドバー / 共通 -->
   <string name="chat_history">会話履歴</string>
   <string name="new_chat">新規チャット</string>
+  <string name="title_source_image">画像チャット</string>
+  <string name="title_source_video">動画チャット</string>
+  <string name="title_source_audio">音声チャット</string>
+  <string name="title_source_attachment">添付チャット</string>
   <string name="no_chat_history">会話履歴がありません</string>
   <string name="delete">削除</string>
   <string name="menu">メニュー</string>

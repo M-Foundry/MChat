@@ -23,7 +23,6 @@ import com.mroldl001.mimochat.R
 import com.mroldl001.mimochat.domain.model.AIModel
 import com.mroldl001.mimochat.ui.chat.components.SettingsContainerDialog
 import com.mroldl001.mimochat.ui.chat.components.SettingsDialogIcon
-import com.mroldl001.mimochat.ui.chat.components.rememberSettingsTransition
 
 private const val FOLLOW = "FOLLOW"
 
@@ -66,10 +65,7 @@ fun TitleModelSettingsDialog(
     onTitleModelSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val transition = rememberSettingsTransition()
     SettingsContainerDialog(
-        anchorBounds = Rect.Zero,
-        transition = transition,
         onDismissRequest = onDismiss,
         icon = { SettingsDialogIcon(Icons.Outlined.Title) },
         title = {

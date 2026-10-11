@@ -7,6 +7,8 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
+private val VERSION_TAG_REGEX = Regex("(?i)^v?(\\d+)\\.(\\d+)\\.(\\d+)")
+
 data class GitHubRelease(
     val tagName: String,
     val name: String,
@@ -56,7 +58,7 @@ object GitHubUpdateRepository {
                 UpdateCheckResult.Available(release)
             }
         }.getOrElse { error ->
-            UpdateCheckResult.Failed(error.message ?: "无法连接 GitHub")
+            UpdateCheckResult.Failed(error.message ?: "GitHub")
         }
     }
 
@@ -81,7 +83,7 @@ object GitHubUpdateRepository {
     }
 
     private fun versionCodeFromTag(tag: String): Long? {
-        val match = Regex("(?i)^v?(\\d+)\\.(\\d+)\\.(\\d+)").find(tag) ?: return null
+        val match = VERSION_TAG_REGEX.find(tag) ?: return null
         val parts = match.groupValues.drop(1).map { it.toLongOrNull() ?: return null }
         return parts[0] * 100 + parts[1] * 10 + parts[2]
     }
@@ -102,8 +104,8 @@ object GitHubUpdateRepository {
         if (apkUrl.isNullOrBlank()) return null
         return GitHubRelease(
             tagName = tag,
-            name = json.optString("name").ifBlank { "版本更新" },
-            notes = json.optString("body").ifBlank { "此发行版没有提供说明。" },
+            name = json.optString("name"),
+            notes = json.optString("body"),
             apkUrl = apkUrl,
             prerelease = json.optBoolean("prerelease"),
             versionCode = versionCode
@@ -120,7 +122,7 @@ object GitHubUpdateRepository {
             connection.setRequestProperty("User-Agent", "MChat/$currentVersionName")
             val responseCode = connection.responseCode
             if (responseCode !in 200..299) {
-                throw IllegalStateException("GitHub 请求失败（HTTP $responseCode）")
+                throw IllegalStateException("HTTP $responseCode")
             }
             connection.inputStream.bufferedReader().use { it.readText() }
         } finally {

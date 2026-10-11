@@ -174,7 +174,7 @@ internal fun UpdateReleaseDialog(
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         icon = { SettingsDialogIcon(Icons.Outlined.SystemUpdate) },
         title = {
-            Text(release.name)
+            Text(release.name.ifBlank { stringResource(R.string.update_release_default_name) })
         },
         text = {
             Column(
@@ -185,7 +185,7 @@ internal fun UpdateReleaseDialog(
             ) {
                 Text(stringResource(R.string.update_release_notes), fontWeight = FontWeight.Bold)
                 Text(
-                    text = release.notes,
+                    text = release.notes.ifBlank { stringResource(R.string.update_release_no_notes) },
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 8.dp)
                 )

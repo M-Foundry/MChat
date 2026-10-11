@@ -13,6 +13,34 @@
   <string name="theme_color">Theme Color</string>
   <string name="theme_default">Ink &amp; Paper</string>
   <string name="theme_custom">Custom Color</string>
+  <string name="custom_color_hex_label">HEX value</string>
+  <string name="custom_color_hex_error">Enter a 6-digit hex color value</string>
+  <string name="history_group_today">Today</string>
+  <string name="history_group_week">Last 7 days</string>
+  <string name="history_group_older">Earlier</string>
+  <string name="time_yesterday">Yesterday %1$s</string>
+  <string name="action_retry">Retry</string>
+  <string name="action_edit">Edit</string>
+  <string name="action_send_failed">Send failed</string>
+  <string name="action_retry_send">Tap to retry</string>
+  <string name="notif_channel_title">MChat</string>
+  <string name="attachment_video">Video attachment</string>
+  <string name="attachment_audio">Audio attachment</string>
+  <string name="attachment_audio_short">Audio</string>
+  <string name="attachment_image">Image attachment</string>
+  <string name="attachment_file">File attachment</string>
+  <string name="attachment_type_sheet">Spreadsheet</string>
+  <string name="attachment_type_slides">Presentation</string>
+  <string name="attachment_type_text">Text file</string>
+  <string name="attachment_type_file">File</string>
+  <string name="action_play">Play</string>
+  <string name="code_block">Code</string>
+  <string name="close_fullscreen">Exit fullscreen</string>
+  <string name="code_fullscreen">View fullscreen</string>
+  <string name="zoom_reset">Reset zoom</string>
+  <string name="action_pause">Pause</string>
+  <string name="action_remove_attachment">Remove attachment</string>
+  <string name="loading_ellipsis">Loading…</string>
   <string name="theme_auto_color">Dynamic Color</string>
   <string name="theme_miku_green">Hatsune Resonance</string>
   <string name="theme_teto_red">Yoshiwara Lament</string>
@@ -78,7 +106,10 @@
   <string name="easter_egg_v2_0_desc">That paranoid android keeps updating MIMO Chat — he migrated me to the brand-new Android 16</string>
   <string name="easter_egg_v1_2_desc">Smells like something a teenager would do — smells like MIMO Chat with an optimized background-keepalive mechanism</string>
   <string name="easter_egg_v1_0_desc">This might just be a great expedition! A journey of a thousand miles begins with a single step</string>
-  <string name="easter_egg_v2_2_desc">Choose theme. Choose conversation title generation model. Choose delete. Choose retry…</string>
+  <string name="easter_egg_v2_4_desc">Choose theme. Choose conversation title generation model. Choose delete. Choose retry…</string>
+  <string name="easter_egg_override_desc">Want to slightly rewrite here, those functions of MChat</string>
+  <string name="easter_egg_honeycomb_desc">"Designed from the ground up for tablets"</string>
+  <string name="egg_cover_of">%1$s cover</string>
   <string name="easter_egg_sbr_desc">LESSON4: Show your respect, show your respect, and then move towards a brand new stage of MChat!</string>
   <string name="about_mchat">About MChat</string>
   <string name="about_mchat_desc">App info and notices</string>
@@ -91,13 +122,14 @@
 
   <!-- Update dialog -->
   <string name="update_release_notes">Release Notes</string>
+  <string name="update_release_default_name">Version Update</string>
+  <string name="update_release_no_notes">This release has no notes.</string>
   <string name="download_and_install">Download &amp; Install</string>
   <string name="common_cancel">Cancel</string>
 
   <!-- Banner -->
   <string name="banner_castle_desc">Attach files, open the camera, and let MChat witness a majestic castle built from a brand-new UI and motion design</string>
   <string name="banner_cover_desc">Show me the castle cover</string>
-  <string name="banner_trainspotting_cover_desc">Trainspotting cover</string>
 
   <!-- About -->
   <string name="about_app_icon_desc">MChat icon</string>
@@ -115,6 +147,10 @@
   <!-- Chat / Sidebar / Common -->
   <string name="chat_history">History</string>
   <string name="new_chat">New Chat</string>
+  <string name="title_source_image">Image chat</string>
+  <string name="title_source_video">Video chat</string>
+  <string name="title_source_audio">Audio chat</string>
+  <string name="title_source_attachment">Attachment chat</string>
   <string name="no_chat_history">No conversation history</string>
   <string name="delete">Delete</string>
   <string name="menu">Menu</string>

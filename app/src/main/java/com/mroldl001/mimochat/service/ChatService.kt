@@ -10,7 +10,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
-import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -28,7 +27,6 @@ class ChatService : Service() {
         const val EXTRA_CHAT_ID = "com.mroldl001.mimochat.extra.CHAT_ID"
     }
 
-    private val binder = LocalBinder()
     private lateinit var notificationManager: NotificationManager
     private var currentNotificationText = ""
     private var currentChatId: Long = 0L
@@ -36,10 +34,6 @@ class ChatService : Service() {
     /** 通知文本也跟着语言切 */
     private val localizedContext: Context
         get() = AppLocale.wrap(this, PreferencesManager(this).getAppLanguage())
-
-    inner class LocalBinder : Binder() {
-        fun getService(): ChatService = this@ChatService
-    }
 
     override fun onCreate() {
         super.onCreate()
@@ -68,8 +62,6 @@ class ChatService : Service() {
         return START_NOT_STICKY
     }
 
-    override fun onBind(intent: Intent?): IBinder = binder
-
     fun updateNotificationText(text: String) {
         currentNotificationText = text
         updateNotification(text)
@@ -79,6 +71,8 @@ class ChatService : Service() {
         val notification = createNotification(text)
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
+
+    override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
@@ -107,7 +101,7 @@ class ChatService : Service() {
                 .setStyledByProgress(false)
                 .setProgress(1)
             return Notification.Builder(this, CHANNEL_ID)
-                .setContentTitle("MChat")
+                .setContentTitle(localizedContext.getString(R.string.notif_channel_title))
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.ic_menu_send)
                 .setContentIntent(pendingIntent)
@@ -117,7 +111,7 @@ class ChatService : Service() {
         }
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("MChat")
+            .setContentTitle(localizedContext.getString(R.string.notif_channel_title))
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_send)
             .setContentIntent(pendingIntent)
@@ -130,8 +124,6 @@ class ChatService : Service() {
             builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
         }
 
-        val notification = builder.build()
-
-        return notification
+        return builder.build()
     }
 }

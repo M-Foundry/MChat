@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Base64
+import android.util.Log
 import android.widget.Toast
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.compose.runtime.mutableStateListOf
@@ -158,9 +159,13 @@ class ChatViewModel @Inject constructor(
     private val chatRepository: ChatRepository,
     private val modelRepository: ModelRepository,
     private val usageRepository: UsageRepository,
-    private val preferencesManager: PreferencesManager,
+    val preferencesManager: PreferencesManager,
     private val application: Application
 ) : ViewModel() {
+
+    private companion object {
+        const val TAG = "ChatViewModel"
+    }
 
     // 跟着语言切
     private val localizedContext: Context
@@ -227,6 +232,11 @@ class ChatViewModel @Inject constructor(
     private val activeStreams = mutableSetOf<Long>()
 
     init {
+        viewModelScope.launch {
+            preferencesManager.revision.drop(1)
+                .debounce(120)
+                .collect { syncPersistedSettings() }
+        }
         loadModels()
         loadChats()
         // 平板没有"打开抽屉"事件
@@ -291,7 +301,59 @@ class ChatViewModel @Inject constructor(
 
     fun getCustomThemeColorHex(): String = preferencesManager.getCustomThemeColorHex()
 
+    private fun syncPersistedSettings() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val savedModelId = preferencesManager.getSelectedModelId()
+            val snapshot = ChatUiState(
+                themeColor = preferencesManager.getThemeColor(),
+                themeMode = preferencesManager.getThemeMode(),
+                codeBlockColorMode = preferencesManager.getCodeBlockColorMode(),
+                titleModelId = preferencesManager.getTitleModelId(),
+                apiKey = preferencesManager.getApiKey(),
+                apiBaseUrl = preferencesManager.getApiBaseUrl(),
+                customSystemPrompt = preferencesManager.getCustomSystemPrompt(),
+                chatBackgroundUri = preferencesManager.getChatBackgroundUri(),
+                chatBackgroundOpacity = preferencesManager.getChatBackgroundOpacity(),
+                temperature = preferencesManager.getTemperature(),
+                topP = preferencesManager.getTopP(),
+                frequencyPenalty = preferencesManager.getFrequencyPenalty(),
+                presencePenalty = preferencesManager.getPresencePenalty(),
+                acceptPrereleaseUpdates = preferencesManager.getAcceptPrereleaseUpdates(),
+                showUsage = preferencesManager.getShowUsage(),
+                predictiveBack = preferencesManager.getPredictiveBack(),
+                usageLoggedIn = preferencesManager.getUsageCookie().isNotBlank()
+            )
+            _uiState.update { state ->
+                state.copy(
+                    themeColor = snapshot.themeColor,
+                    themeMode = snapshot.themeMode,
+                    codeBlockColorMode = snapshot.codeBlockColorMode,
+                    titleModelId = snapshot.titleModelId,
+                    apiKey = snapshot.apiKey,
+                    apiBaseUrl = snapshot.apiBaseUrl,
+                    customSystemPrompt = snapshot.customSystemPrompt,
+                    chatBackgroundUri = snapshot.chatBackgroundUri,
+                    chatBackgroundOpacity = snapshot.chatBackgroundOpacity,
+                    temperature = snapshot.temperature,
+                    topP = snapshot.topP,
+                    frequencyPenalty = snapshot.frequencyPenalty,
+                    presencePenalty = snapshot.presencePenalty,
+                    acceptPrereleaseUpdates = snapshot.acceptPrereleaseUpdates,
+                    showUsage = snapshot.showUsage,
+                    predictiveBack = snapshot.predictiveBack,
+                    usageLoggedIn = snapshot.usageLoggedIn,
+                    selectedModel = if (savedModelId.isBlank()) {
+                        state.selectedModel
+                    } else {
+                        state.availableModels.find { it.id == savedModelId } ?: state.selectedModel
+                    }
+                )
+            }
+        }
+    }
+
     fun setCustomThemeColorHex(hex: String) {
+        preferencesManager.saveThemeColor(ThemeColor.CUSTOM)
         _uiState.update { it.copy(themeColor = ThemeColor.CUSTOM) }
         preferencesManager.saveCustomThemeColorHex(hex)
     }
@@ -673,7 +735,7 @@ class ChatViewModel @Inject constructor(
                 }
             }
 
-            val chat = _uiState.value.currentChat!!
+            val chat = _uiState.value.currentChat ?: return@launch
             activeChatId = chat.id
             val isNewChat = chat.title == defaultChatTitle
             android.util.Log.d("ChatViewModel", "Current chat: ${chat.title}, isNewChat: $isNewChat")
@@ -715,10 +777,10 @@ class ChatViewModel @Inject constructor(
             val apiBaseUrl = _uiState.value.apiBaseUrl
             val titleSource = content.ifBlank {
                 when {
-                    attachments.any { it.mimeType?.startsWith("image/") == true } -> "图片对话"
-                    attachments.any { it.mimeType?.startsWith("video/") == true } -> "视频对话"
-                    attachments.any { it.mimeType?.startsWith("audio/") == true } -> "音频对话"
-                    else -> "附件对话"
+                    attachments.any { it.mimeType?.startsWith("image/") == true } -> localizedContext.getString(R.string.title_source_image)
+                    attachments.any { it.mimeType?.startsWith("video/") == true } -> localizedContext.getString(R.string.title_source_video)
+                    attachments.any { it.mimeType?.startsWith("audio/") == true } -> localizedContext.getString(R.string.title_source_audio)
+                    else -> localizedContext.getString(R.string.title_source_attachment)
                 }
             }
 
@@ -752,6 +814,7 @@ class ChatViewModel @Inject constructor(
                             }
                         }
                     } catch (e: Exception) {
+                        Log.w(TAG, "生成对话标题失败，保留默认标题 chatId=$chatId", e)
                     }
                 }
             }

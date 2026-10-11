@@ -26,9 +26,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.mroldl001.mimochat.R
 import com.mroldl001.mimochat.ui.theme.ThemeColor
 import com.mroldl001.mimochat.ui.theme.themePreviewColorScheme
 import kotlin.math.roundToInt
@@ -59,7 +61,7 @@ internal fun CustomColorDialog(
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(28.dp),
         icon = { SettingsDialogIcon(Icons.Outlined.Palette) },
-        title = { Text("自定义色彩") },
+        title = { Text(stringResource(R.string.theme_custom)) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -71,7 +73,7 @@ internal fun CustomColorDialog(
                 ) {
                     val previewHex = toHex(red, green, blue)
                     ThemePreviewCard(
-                        label = "白天",
+                        label = stringResource(R.string.preview_day),
                         scheme = themePreviewColorScheme(
                             ThemeColor.CUSTOM,
                             dark = false,
@@ -81,7 +83,7 @@ internal fun CustomColorDialog(
                         onClick = {}
                     )
                     ThemePreviewCard(
-                        label = "夜间",
+                        label = stringResource(R.string.preview_night),
                         scheme = themePreviewColorScheme(
                             ThemeColor.CUSTOM,
                             dark = true,
@@ -118,7 +120,7 @@ internal fun CustomColorDialog(
                 )
 
                 Text(
-                    text = "HEX色值",
+                    text = stringResource(R.string.custom_color_hex_label),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -153,7 +155,7 @@ internal fun CustomColorDialog(
                 )
                 if (hexError) {
                     Text(
-                        text = "请输入 6 位十六进制颜色值",
+                        text = stringResource(R.string.custom_color_hex_error),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -165,12 +167,12 @@ internal fun CustomColorDialog(
                 onClick = { onSave("#${toHex(red, green, blue)}") },
                 enabled = !hexError
             ) {
-                Text("保存")
+                Text(stringResource(R.string.save))
             }
         },
         dismissButton = {
             TextButton(onClick = onCancel) {
-                Text("取消")
+                Text(stringResource(R.string.common_cancel))
             }
         }
     )

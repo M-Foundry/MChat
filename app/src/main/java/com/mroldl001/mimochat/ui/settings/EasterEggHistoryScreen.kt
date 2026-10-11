@@ -42,7 +42,7 @@ import java.net.URLEncoder
 
 private const val COVER_USER_AGENT = "MChat/2.1.5 (https://github.com/MRoldL001/MChat)"
 
-private sealed interface CoverSource {
+internal sealed interface CoverSource {
     data class Netease(val songId: Long) : CoverSource
     data class BilibiliBangumi(val seasonId: Int) : CoverSource
     // 站点须国内可直连
@@ -51,20 +51,25 @@ private sealed interface CoverSource {
     data class Douban(val query: String) : CoverSource
 }
 
-private data class LegacyEasterEgg(
+internal data class LegacyEasterEgg(
     val versionNumber: String,
     val versionSubtitle: String,
-    val description: String,
-    @StringRes val descriptionRes: Int? = null,
+    @StringRes val descriptionRes: Int,
     val link: String,
     val cover: CoverSource
 )
 
 private val legacyEasterEggs = listOf(
     LegacyEasterEgg(
+        versionNumber = "V2.4.x",
+        versionSubtitle = "Trainspotting",
+        descriptionRes = R.string.easter_egg_v2_4_desc,
+        link = "https://www.imdb.com/title/tt0117951",
+        cover = CoverSource.Netease(5056908L)
+    ),
+    LegacyEasterEgg(
         versionNumber = "V2.2.x",
         versionSubtitle = "Steel Ball Run",
-        description = "",
         descriptionRes = R.string.easter_egg_sbr_desc,
         link = "https://zh.moegirl.org.cn/%E9%A3%86%E9%A9%AC%E9%87%8E%E9%83%8E",
         cover = CoverSource.AniList("JoJo's Bizarre Adventure: Steel Ball Run")
@@ -72,7 +77,6 @@ private val legacyEasterEggs = listOf(
     LegacyEasterEgg(
         versionNumber = "V2.1.x",
         versionSubtitle = "Show me the castle",
-        description = "",
         descriptionRes = R.string.banner_castle_desc,
         link = "https://music.163.com/song?id=2630817670",
         cover = CoverSource.Netease(2630817670L)
@@ -80,7 +84,6 @@ private val legacyEasterEggs = listOf(
     LegacyEasterEgg(
         versionNumber = "V2.0.x",
         versionSubtitle = "Paranoid Android",
-        description = "那个偏执狂依旧在更新 MIMO Chat，他将我迁移到了全新的 Android 16",
         descriptionRes = R.string.easter_egg_v2_0_desc,
         link = "https://music.163.com/song?id=22497471",
         cover = CoverSource.Netease(22497471L)
@@ -88,7 +91,6 @@ private val legacyEasterEggs = listOf(
     LegacyEasterEgg(
         versionNumber = "V1.2.x",
         versionSubtitle = "Smells Like Teen Spirit",
-        description = "闻起来就像青少年会干的事，闻起来就像优化了后台保活机制的 MIMO Chat",
         descriptionRes = R.string.easter_egg_v1_2_desc,
         link = "https://music.163.com/song?id=21303923",
         cover = CoverSource.Netease(21303923L)
@@ -96,7 +98,7 @@ private val legacyEasterEggs = listOf(
     LegacyEasterEgg(
         versionNumber = "V1.1.x",
         versionSubtitle = "Honeycomb",
-        description = "\"Designed from the ground up for tablets\"",
+        descriptionRes = R.string.easter_egg_honeycomb_desc,
         link = "https://developer.android.google.cn/about/versions/android-3.0-highlights",
         cover = CoverSource.PageIcon(
             pageUrl = "https://developer.android.google.cn/about/versions/android-3.0-highlights?hl=zh-cn"
@@ -105,7 +107,6 @@ private val legacyEasterEggs = listOf(
     LegacyEasterEgg(
         versionNumber = "V1.0.x",
         versionSubtitle = "Stardust Crusaders",
-        description = "这或许会是一次伟大的远征！千里之行，始于足下",
         descriptionRes = R.string.easter_egg_v1_0_desc,
         link = "https://zh.moegirl.org.cn/JOJO%E7%9A%84%E5%A5%87%E5%A6%99%E5%86%92%E9%99%A9/%E5%8A%A8%E7%94%BB#TV%E7%89%88",
         cover = CoverSource.AniList("JoJo's Bizarre Adventure: Stardust Crusaders")
@@ -200,7 +201,7 @@ private fun fetchDoubanCover(query: String): String? {
     return subjects.getJSONObject(0).optString("cover").takeIf { it.isNotBlank() }
 }
 
-private suspend fun fetchCoverUrl(source: CoverSource): String? = withContext(Dispatchers.IO) {
+internal suspend fun fetchCoverUrl(source: CoverSource): String? = withContext(Dispatchers.IO) {
     runCatching {
         when (source) {
             is CoverSource.Netease -> {
@@ -284,7 +285,7 @@ private fun LegacyEasterEggCard(egg: LegacyEasterEgg) {
     EasterEggBanner(
         versionNumber = egg.versionNumber,
         versionSubtitle = egg.versionSubtitle,
-        description = egg.descriptionRes?.let { stringResource(it) } ?: egg.description,
+        description = stringResource(egg.descriptionRes),
         coverUrl = coverUrl,
         onClick = {
             runCatching {
@@ -340,7 +341,7 @@ internal fun EasterEggBanner(
                 coverUrl?.let { imageUrl ->
                     AsyncImage(
                         model = imageUrl,
-                        contentDescription = "$versionSubtitle 封面",
+                        contentDescription = stringResource(R.string.egg_cover_of, versionSubtitle),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )

@@ -28,17 +28,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -58,13 +50,8 @@ import com.mroldl001.mimochat.R
 import com.mroldl001.mimochat.ui.settings.AppLocale
 import com.mroldl001.mimochat.ui.settings.LanguageSettingsDialog
 import com.mroldl001.mimochat.domain.model.AIModel
-import coil.compose.AsyncImage
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.drop
 
 @Composable
 fun SettingsScreen(
@@ -82,7 +69,6 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val transition = rememberSettingsTransition()
     var showApiKey by remember { mutableStateOf(false) }
     var showBackground by remember { mutableStateOf(false) }
     var showParameters by remember { mutableStateOf(false) }
@@ -93,6 +79,12 @@ fun SettingsScreen(
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showTitleModel by remember { mutableStateOf(false) }
     var customColorHex by remember { mutableStateOf(viewModel.getCustomThemeColorHex()) }
+
+    LaunchedEffect(Unit) {
+        viewModel.preferencesManager.revision.drop(1).collect {
+            customColorHex = viewModel.getCustomThemeColorHex()
+        }
+    }
     var pendingCropUri by rememberSaveable { mutableStateOf<String?>(null) }
 
     val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -147,8 +139,6 @@ fun SettingsScreen(
     if (showApiKey) {
         ApiKeyDialog(
             currentKey = uiState.apiKey,
-            anchorBounds = Rect.Zero,
-            transition = transition,
             onDismiss = { showApiKey = false },
             onConfirm = { viewModel.setApiKey(it); showApiKey = false }
         )
@@ -182,8 +172,6 @@ fun SettingsScreen(
             initialTopP = uiState.topP,
             initialFrequencyPenalty = uiState.frequencyPenalty,
             initialPresencePenalty = uiState.presencePenalty,
-            anchorBounds = Rect.Zero,
-            transition = transition,
             onDismiss = { showParameters = false },
             onConfirm = { temperature, topP, frequencyPenalty, presencePenalty ->
                 viewModel.setTemperature(temperature)
@@ -198,8 +186,6 @@ fun SettingsScreen(
     if (showPrompt) {
         CustomSystemPromptDialog(
             currentPrompt = uiState.customSystemPrompt,
-            anchorBounds = Rect.Zero,
-            transition = transition,
             onDismiss = { showPrompt = false },
             onConfirm = { viewModel.setCustomSystemPrompt(it); showPrompt = false }
         )
@@ -207,15 +193,12 @@ fun SettingsScreen(
     if (showApiUrl) {
         ApiBaseUrlDialog(
             currentUrl = uiState.apiBaseUrl,
-            anchorBounds = Rect.Zero,
-            transition = transition,
             onDismiss = { showApiUrl = false },
             onConfirm = { viewModel.setApiBaseUrl(it); showApiUrl = false }
         )
     }
     if (showAbout) {
         AboutDialog(
-            transition = transition,
             onDismiss = { showAbout = false },
             onDisclaimerClick = {
                 showAbout = false
@@ -353,7 +336,7 @@ private fun SettingsPageContent(
                     .padding(horizontal = 24.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                TrainspottingBanner()
+                OverrideEasterEggBanner()
 
                 SettingsGroupTitle(stringResource(R.string.group_appearance))
 
@@ -599,145 +582,32 @@ private fun SettingsPageContent(
     }
 }
 
-private suspend fun fetchNeteaseCover(songId: Long): String? = withContext(Dispatchers.IO) {
-    runCatching {
-        val ids = URLEncoder.encode("[$songId]", "UTF-8")
-        val connection = URL("https://music.163.com/api/song/detail/?id=$songId&ids=$ids").openConnection() as HttpURLConnection
-        try {
-            connection.apply {
-                requestMethod = "GET"
-                connectTimeout = 5_000
-                readTimeout = 5_000
-                setRequestProperty("User-Agent", "Mozilla/5.0")
-            }
-            if (connection.responseCode !in 200..299) return@runCatching null
-            val body = connection.inputStream.bufferedReader().use { it.readText() }
-            val song = JSONObject(body).getJSONArray("songs").getJSONObject(0)
-            (song.optJSONObject("al") ?: song.optJSONObject("album"))
-                ?.optString("picUrl")?.takeIf { it.isNotBlank() }
-        } finally {
-            connection.disconnect()
-        }
-    }.getOrNull()
-}
+private val OVERRIDE_EASTER_EGG = LegacyEasterEgg(
+    versionNumber = "V2.4.x",
+    versionSubtitle = "Override",
+    descriptionRes = R.string.easter_egg_override_desc,
+    link = "https://y.music.163.com/m/song?id=2105374808",
+    cover = CoverSource.Netease(2105374808L)
+)
 
 @Composable
-private fun TrainspottingBanner() {
+private fun OverrideEasterEggBanner() {
     val context = LocalContext.current
-    val versionName = remember(context) {
-        context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
+    val coverUrl by produceState<String?>(initialValue = null, OVERRIDE_EASTER_EGG.cover) {
+        value = fetchCoverUrl(OVERRIDE_EASTER_EGG.cover)
     }
-    val versionSeparator = versionName.indexOf('-')
-    val rawVersionNumber = if (versionSeparator >= 0) versionName.substring(0, versionSeparator) else versionName
-    val versionNumber = "V" + rawVersionNumber.removePrefix("v").removePrefix("V")
-    val versionSubtitle = "Trainspotting"
-    val cardColor by animateColorAsState(
-        targetValue = MaterialTheme.colorScheme.primaryContainer,
-        animationSpec = tween(durationMillis = 450),
-        label = "trainspotting_card_color"
-    )
-    val cardContentColor by animateColorAsState(
-        targetValue = MaterialTheme.colorScheme.onPrimaryContainer,
-        animationSpec = tween(durationMillis = 450),
-        label = "trainspotting_card_content_color"
-    )
-    val accentColor by animateColorAsState(
-        targetValue = MaterialTheme.colorScheme.primary,
-        animationSpec = tween(durationMillis = 450),
-        label = "trainspotting_card_accent_color"
-    )
-    val coverUrl by produceState<String?>(initialValue = null) {
-        value = fetchNeteaseCover(5056908L)
-    }
-    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null
-            ) {
+    EasterEggBanner(
+        versionNumber = OVERRIDE_EASTER_EGG.versionNumber,
+        versionSubtitle = OVERRIDE_EASTER_EGG.versionSubtitle,
+        description = stringResource(OVERRIDE_EASTER_EGG.descriptionRes),
+        coverUrl = coverUrl,
+        onClick = {
+            runCatching {
                 context.startActivity(
-                    Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse("https://movie.douban.com/subject/1292528/")
-                    )
-                )
-            },
-        shape = RoundedCornerShape(24.dp),
-        color = cardColor,
-        contentColor = cardContentColor
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(accentColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Outlined.Egg,
-                    contentDescription = null,
-                    tint = accentColor
-                )
-                coverUrl?.let { imageUrl ->
-                    AsyncImage(
-                        model = imageUrl,
-                        contentDescription = stringResource(R.string.banner_trainspotting_cover_desc),
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
-            Spacer(Modifier.width(18.dp))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                    val availableWidth = this.maxWidth
-                    val initialTitleFontSize = MaterialTheme.typography.titleLarge.fontSize
-                    var titleFontSize by remember(versionName, availableWidth, initialTitleFontSize) {
-                        mutableStateOf(initialTitleFontSize)
-                    }
-                    Text(
-                        modifier = Modifier.widthIn(max = availableWidth),
-                        text = buildAnnotatedString {
-                            append(versionNumber)
-                            if (versionSubtitle.isNotEmpty()) {
-                                append(" ")
-                                withStyle(
-                                    SpanStyle(
-                                        color = accentColor,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                ) {
-                                    append(versionSubtitle)
-                                }
-                            }
-                        },
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = titleFontSize),
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Clip,
-                        onTextLayout = { result ->
-                            if (result.didOverflowWidth && titleFontSize > 12.sp) {
-                                titleFontSize = (titleFontSize.value - 1f).coerceAtLeast(12f).sp
-                            }
-                        }
-                    )
-                }
-                Text(
-                    text = stringResource(R.string.easter_egg_v2_2_desc),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = cardContentColor.copy(alpha = 0.82f)
+                    Intent(Intent.ACTION_VIEW, Uri.parse(OVERRIDE_EASTER_EGG.link))
                 )
             }
         }
-    }
+    )
 }
+

@@ -3,11 +3,15 @@ package com.mroldl001.mimochat.data.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.mroldl001.mimochat.ui.theme.CodeBlockColorMode
 import com.mroldl001.mimochat.ui.theme.ThemeColor
 import com.mroldl001.mimochat.ui.theme.ThemeMode
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -16,7 +20,15 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 class PreferencesManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private val _revision = MutableStateFlow(0L)
+    val revision: StateFlow<Long> = _revision.asStateFlow()
+
+    private fun bumpRevision() {
+        _revision.value = _revision.value + 1
+    }
+
     companion object {
+        private const val TAG = "PreferencesManager"
         private const val PREFS_NAME = "mimochat_prefs"
         private const val SECURE_PREFS_NAME = "mimochat_secure_prefs"
         private const val KEY_THEME_COLOR = "theme_color"
@@ -69,12 +81,16 @@ class PreferencesManager @Inject constructor(
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
+        }.onFailure {
+            Log.e(TAG, "EncryptedSharedPreferences 初始化失败，API Key 与 Cookie 将以明文存储", it)
         }.getOrNull()
     }
 
     private fun readSecureApiKey(): String? {
         val secure = securePrefs ?: return null
-        return runCatching { secure.getString(KEY_API_KEY, null) }.getOrNull()
+        return runCatching { secure.getString(KEY_API_KEY, null) }
+            .onFailure { Log.e(TAG, "读取加密 API Key 失败", it) }
+            .getOrNull()
     }
 
     private fun writeSecureApiKey(key: String): Boolean {
@@ -82,6 +98,8 @@ class PreferencesManager @Inject constructor(
         return runCatching {
             secure.edit().putString(KEY_API_KEY, key).apply()
             true
+        }.onFailure {
+            Log.e(TAG, "写入加密 API Key 失败", it)
         }.getOrDefault(false)
     }
 
@@ -107,6 +125,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveThemeColor(color: ThemeColor) {
         prefs.edit().putString(KEY_THEME_COLOR, color.name).apply()
+        bumpRevision()
     }
 
     fun getCustomThemeColorHex(): String {
@@ -116,6 +135,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveCustomThemeColorHex(hex: String) {
         prefs.edit().putString(KEY_CUSTOM_THEME_COLOR, hex).apply()
+        bumpRevision()
     }
 
     fun getCodeBlockColorMode(): CodeBlockColorMode {
@@ -129,6 +149,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveCodeBlockColorMode(mode: CodeBlockColorMode) {
         prefs.edit().putString(KEY_CODE_BLOCK_COLOR_MODE, mode.name).apply()
+        bumpRevision()
     }
 
     fun getAppLanguage(): String {
@@ -137,6 +158,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveAppLanguage(languageCode: String) {
         prefs.edit().putString(KEY_APP_LANGUAGE, languageCode).apply()
+        bumpRevision()
     }
 
     fun getThemeMode(): ThemeMode {
@@ -150,6 +172,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveThemeMode(mode: ThemeMode) {
         prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
+        bumpRevision()
     }
 
     fun getApiKey(): String {
@@ -162,6 +185,7 @@ class PreferencesManager @Inject constructor(
         } else {
             prefs.edit().putString(KEY_API_KEY, key).apply()
         }
+        bumpRevision()
     }
 
     fun getApiBaseUrl(): String {
@@ -170,6 +194,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveApiBaseUrl(url: String) {
         prefs.edit().putString(KEY_API_BASE_URL, url).apply()
+        bumpRevision()
     }
 
     fun getCustomSystemPrompt(): String {
@@ -178,6 +203,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveCustomSystemPrompt(prompt: String) {
         prefs.edit().putString(KEY_CUSTOM_SYSTEM_PROMPT, prompt).apply()
+        bumpRevision()
     }
 
     fun getChatBackgroundUri(): String? {
@@ -192,6 +218,7 @@ class PreferencesManager @Inject constructor(
                 putString(KEY_CHAT_BACKGROUND_URI, uri)
             }
         }.apply()
+        bumpRevision()
     }
 
     fun getChatBackgroundOpacity(): Float {
@@ -200,6 +227,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveChatBackgroundOpacity(value: Float) {
         prefs.edit().putFloat(KEY_CHAT_BACKGROUND_OPACITY, value.coerceIn(0f, 1f)).apply()
+        bumpRevision()
     }
 
     fun getSelectedModelId(): String {
@@ -208,6 +236,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveSelectedModelId(modelId: String) {
         prefs.edit().putString(KEY_SELECTED_MODEL_ID, modelId).apply()
+        bumpRevision()
     }
 
     fun getTitleModelId(): String {
@@ -216,6 +245,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveTitleModelId(modelId: String) {
         prefs.edit().putString(KEY_TITLE_MODEL_ID, modelId).apply()
+        bumpRevision()
     }
 
     fun hasRequestedNotificationPermission(): Boolean {
@@ -224,6 +254,7 @@ class PreferencesManager @Inject constructor(
 
     fun setNotificationPermissionRequested(requested: Boolean) {
         prefs.edit().putBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, requested).apply()
+        bumpRevision()
     }
 
     fun getAcceptPrereleaseUpdates(): Boolean {
@@ -232,6 +263,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveAcceptPrereleaseUpdates(accept: Boolean) {
         prefs.edit().putBoolean(KEY_ACCEPT_PRERELEASE_UPDATES, accept).apply()
+        bumpRevision()
     }
 
     fun getShowUsage(): Boolean {
@@ -240,6 +272,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveShowUsage(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_SHOW_USAGE, enabled).apply()
+        bumpRevision()
     }
 
     fun getPredictiveBack(): Boolean {
@@ -249,6 +282,7 @@ class PreferencesManager @Inject constructor(
 
     fun savePredictiveBack(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_PREDICTIVE_BACK, enabled).apply()
+        bumpRevision()
     }
 
     fun registerPredictiveBackListener(callback: (Boolean) -> Unit): () -> Unit {
@@ -263,7 +297,9 @@ class PreferencesManager @Inject constructor(
     fun getUsageCookie(): String {
         val secure = securePrefs
         if (secure != null) {
-            val value = runCatching { secure.getString(KEY_USAGE_COOKIE, null) }.getOrNull()
+            val value = runCatching { secure.getString(KEY_USAGE_COOKIE, null) }
+                .onFailure { Log.e(TAG, "读取加密 Cookie 失败", it) }
+                .getOrNull()
             if (!value.isNullOrBlank()) return value
         }
         return prefs.getString(KEY_USAGE_COOKIE, null).orEmpty()
@@ -275,6 +311,8 @@ class PreferencesManager @Inject constructor(
             val written = runCatching {
                 secure.edit().putString(KEY_USAGE_COOKIE, cookie).apply()
                 true
+            }.onFailure {
+                Log.e(TAG, "写入加密 Cookie 失败", it)
             }.getOrDefault(false)
             if (written) {
                 if (prefs.contains(KEY_USAGE_COOKIE)) prefs.edit().remove(KEY_USAGE_COOKIE).apply()
@@ -287,6 +325,7 @@ class PreferencesManager @Inject constructor(
         } else {
             prefs.edit().putString(KEY_USAGE_COOKIE, cookie).apply()
         }
+        bumpRevision()
     }
 
     fun clearUsageCookie() {
@@ -299,6 +338,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveTemperature(value: Float) {
         prefs.edit().putFloat(KEY_TEMPERATURE, value).apply()
+        bumpRevision()
     }
 
     fun getTopP(): Float {
@@ -307,6 +347,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveTopP(value: Float) {
         prefs.edit().putFloat(KEY_TOP_P, value).apply()
+        bumpRevision()
     }
 
     fun getFrequencyPenalty(): Float {
@@ -315,6 +356,7 @@ class PreferencesManager @Inject constructor(
 
     fun saveFrequencyPenalty(value: Float) {
         prefs.edit().putFloat(KEY_FREQUENCY_PENALTY, value).apply()
+        bumpRevision()
     }
 
     fun getPresencePenalty(): Float {
@@ -323,6 +365,7 @@ class PreferencesManager @Inject constructor(
 
     fun savePresencePenalty(value: Float) {
         prefs.edit().putFloat(KEY_PRESENCE_PENALTY, value).apply()
+        bumpRevision()
     }
 
     fun resetParameters() {

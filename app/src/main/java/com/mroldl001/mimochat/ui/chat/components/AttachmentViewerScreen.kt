@@ -2,11 +2,13 @@ package com.mroldl001.mimochat.ui.chat.components
 
 import android.annotation.SuppressLint
 import android.graphics.SurfaceTexture
-import android.media.MediaPlayer
 import android.net.Uri
 import android.view.Surface as AndroidSurface
 import android.view.TextureView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -33,6 +36,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
@@ -58,8 +62,15 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -68,20 +79,31 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import coil.compose.AsyncImage
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
+import androidx.media3.exoplayer.ExoPlayer
+import com.github.panpf.zoomimage.CoilZoomAsyncImage
+import com.github.panpf.zoomimage.rememberCoilZoomState
 import com.mroldl001.mimochat.R
 import com.mroldl001.mimochat.domain.model.MessageAttachment
 import kotlinx.coroutines.delay
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 private const val PROGRESS_TICK_MILLIS = 200L
 private const val SEEK_SETTLE_TOLERANCE_MS = 400
 private val PROGRESS_THUMB_SIZE = 12.dp
 private const val FALLBACK_VIDEO_ASPECT = 16f / 9f
-private val PAGE_HORIZONTAL_PADDING = 20.dp
+private const val MIN_ZOOM = 1f
+private const val MAX_ZOOM = 5f
+private const val ZOOM_RESET_EPSILON = 1.02f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -143,9 +165,9 @@ internal fun AttachmentViewerScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(horizontal = PAGE_HORIZONTAL_PADDING)
+            flingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
         ) {
-            items(count = attachments.size) { page ->
+            items(count = attachments.size, key = { index -> attachments[index].uri }) { page ->
                 val attachment = attachments[page]
                 val mime = attachment.mimeType.orEmpty().lowercase()
                 Box(
@@ -154,8 +176,14 @@ internal fun AttachmentViewerScreen(
                         .fillParentMaxHeight()
                 ) {
                     when {
-                        mime.startsWith("image/") -> ImagePreviewPage(attachment)
-                        mime.startsWith("video/") -> VideoPreviewPage(attachment)
+                        mime.startsWith("image/") -> ImagePreviewPage(
+                            attachment = attachment,
+                            isActive = page == currentIndex
+                        )
+                        mime.startsWith("video/") -> VideoPreviewPage(
+                            attachment = attachment,
+                            isActive = page == currentIndex
+                        )
                         mime.startsWith("audio/") -> AudioPreviewPage(attachment)
                         else -> GenericFilePreviewPage(attachment)
                     }
@@ -166,18 +194,23 @@ internal fun AttachmentViewerScreen(
 }
 
 @Composable
-private fun ImagePreviewPage(attachment: MessageAttachment) {
+private fun ImagePreviewPage(attachment: MessageAttachment, isActive: Boolean) {
+    val zoomState = rememberCoilZoomState()
+    LaunchedEffect(isActive) {
+        if (!isActive) zoomState.zoomable.reset()
+    }
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(8.dp),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        AsyncImage(
+        CoilZoomAsyncImage(
             model = Uri.parse(attachment.uri),
-            contentDescription = attachment.label ?: "图片附件",
+            contentDescription = attachment.label ?: stringResource(R.string.attachment_image),
             contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .clipToBounds(),
+            zoomState = zoomState
         )
     }
 }
@@ -208,7 +241,7 @@ private fun GenericFilePreviewPage(attachment: MessageAttachment) {
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = attachment.label ?: "文件附件",
+                    text = attachment.label ?: stringResource(R.string.attachment_file),
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -220,27 +253,35 @@ private fun GenericFilePreviewPage(attachment: MessageAttachment) {
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
-private fun VideoPreviewPage(attachment: MessageAttachment) {
-    val playback = rememberMediaPlayback(attachment.uri)
+private fun VideoPreviewPage(attachment: MessageAttachment, isActive: Boolean) {
+    val playback = rememberMediaPlayback(attachment.uri, isActive)
     val isPlaying = playback.isPlaying
-    val isPrepared = playback.isPrepared
+    val zoom = remember(attachment.uri) { ZoomTransformState() }
+    LaunchedEffect(attachment.uri) { zoom.reset() }
     val surfaceTextureState = remember(attachment.uri) {
         mutableStateOf<SurfaceTexture?>(null)
     }
     val surfaceTexture by surfaceTextureState
+    val isPrepared = playback.isPrepared
 
-    LaunchedEffect(isPrepared, surfaceTexture) {
+    LaunchedEffect(isPrepared, surfaceTexture, isActive) {
         val player = playback.player ?: return@LaunchedEffect
         val texture = surfaceTexture ?: return@LaunchedEffect
         if (isPrepared) {
             runCatching {
-                player.setSurface(AndroidSurface(texture))
-                player.start()
+                player.clearVideoSurface()
+                player.setVideoSurface(AndroidSurface(texture))
+                player.playWhenReady = isActive
             }
         }
     }
     DisposableEffect(surfaceTexture) {
-        onDispose { playback.player?.runCatching { setSurface(null) } }
+        onDispose {
+            playback.player?.runCatching {
+                clearVideoSurface()
+                setVideoSurface(null)
+            }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -273,53 +314,52 @@ private fun VideoPreviewPage(attachment: MessageAttachment) {
                     modifier = Modifier
                         .width(frameWidth)
                         .height(frameHeight)
-                        .background(color = Color.Black, shape = RoundedCornerShape(10.dp)),
+                        .onSizeChanged { zoom.containerSize = it }
+                        .graphicsLayer {
+                            scaleX = zoom.scale
+                            scaleY = zoom.scale
+                            translationX = zoom.offset.x
+                            translationY = zoom.offset.y
+                        }
+                        .clipToBounds(),
                     contentAlignment = Alignment.Center
                 ) {
-                    AndroidView(
-                        factory = { context ->
-                            TextureView(context).apply {
-                                surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                                    override fun onSurfaceTextureAvailable(
-                                        texture: SurfaceTexture,
-                                        width: Int,
-                                        height: Int
-                                    ) {
-                                        surfaceTextureState.value = texture
-                                    }
-
-                                    override fun onSurfaceTextureSizeChanged(
-                                        texture: SurfaceTexture,
-                                        width: Int,
-                                        height: Int
-                                    ) {
-                                        surfaceTextureState.value = texture
-                                    }
-
-                                    override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
-                                        surfaceTextureState.value = null
-                                        return true
-                                    }
-
-                                    override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-
-                    FilledIconButton(
-                        onClick = { playback.toggle() },
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
-                            contentColor = MaterialTheme.colorScheme.primary
-                        ),
-                        modifier = Modifier.size(56.dp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(color = Color.Black, shape = RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "暂停" else "播放",
-                            modifier = Modifier.size(30.dp)
+                        AndroidView(
+                            factory = { context ->
+                                TextureView(context).apply {
+                                    surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                                        override fun onSurfaceTextureAvailable(
+                                            texture: SurfaceTexture,
+                                            width: Int,
+                                            height: Int
+                                        ) {
+                                            surfaceTextureState.value = texture
+                                        }
+
+                                        override fun onSurfaceTextureSizeChanged(
+                                            texture: SurfaceTexture,
+                                            width: Int,
+                                            height: Int
+                                        ) {
+                                            surfaceTextureState.value = texture
+                                        }
+
+                                        override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
+                                            surfaceTextureState.value = null
+                                            return true
+                                        }
+
+                                        override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
 
@@ -330,6 +370,50 @@ private fun VideoPreviewPage(attachment: MessageAttachment) {
                                 .align(Alignment.BottomEnd)
                                 .padding(8.dp)
                         )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(attachment.uri) {
+                            detectZoomTransformGestures(zoom)
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    FilledIconButton(
+                        onClick = { playback.toggle() },
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ),
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+
+                    if (zoom.isZoomed) {
+                        FilledIconButton(
+                            onClick = { zoom.reset() },
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+                                contentColor = MaterialTheme.colorScheme.primary
+                            ),
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(8.dp)
+                                .size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ZoomOutMap,
+                                contentDescription = stringResource(R.string.zoom_reset),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -347,14 +431,14 @@ private fun VideoPreviewPage(attachment: MessageAttachment) {
 
 @Composable
 private fun AudioPreviewPage(attachment: MessageAttachment) {
-    val playback = rememberMediaPlayback(attachment.uri)
+    val playback = rememberMediaPlayback(attachment.uri, true)
     val isPlaying = playback.isPlaying
     val isPrepared = playback.isPrepared
 
     LaunchedEffect(isPrepared) {
         val player = playback.player ?: return@LaunchedEffect
         if (isPrepared) {
-            runCatching { player.start() }
+            runCatching { player.play() }
         }
     }
 
@@ -386,7 +470,7 @@ private fun AudioPreviewPage(attachment: MessageAttachment) {
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                text = attachment.label ?: "音频附件",
+                text = attachment.label ?: stringResource(R.string.attachment_audio),
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -402,7 +486,7 @@ private fun AudioPreviewPage(attachment: MessageAttachment) {
             ) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "暂停" else "播放",
+                    contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
                     modifier = Modifier.size(34.dp)
                 )
             }
@@ -416,7 +500,7 @@ private fun AudioPreviewPage(attachment: MessageAttachment) {
             if (!isPrepared) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "正在加载…",
+                    text = stringResource(R.string.loading_ellipsis),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -566,50 +650,66 @@ private fun DurationBadge(
     }
 }
 
-private class MediaPlaybackState(var player: MediaPlayer?) {
+private class MediaPlaybackState(var player: ExoPlayer?) {
     var isPrepared by mutableStateOf(false)
     var isPlaying by mutableStateOf(false)
     var position by mutableIntStateOf(0)
     var duration by mutableIntStateOf(0)
-    var seekTarget by mutableStateOf<Int?>(null)
     var videoWidth by mutableIntStateOf(0)
     var videoHeight by mutableIntStateOf(0)
 
     fun toggle() {
         val current = player ?: return
         runCatching {
-            if (current.isPlaying) current.pause() else current.start()
+            if (current.isPlaying) current.pause() else current.play()
         }
     }
 
     fun seekTo(target: Int) {
-        if (player == null) return
-        seekTarget = target
+        val current = player ?: return
+        runCatching { current.seekTo(target.toLong()) }
+        position = target
     }
 }
 
 @Composable
-private fun rememberMediaPlayback(uri: String): MediaPlaybackState {
+private fun rememberMediaPlayback(uri: String, isActive: Boolean): MediaPlaybackState {
     val context = LocalContext.current
     val state = remember(uri) { MediaPlaybackState(player = null) }
+    val autoPlay = isActive
 
     DisposableEffect(uri) {
-        val created = runCatching {
-            MediaPlayer().apply {
-                setDataSource(context, Uri.parse(uri))
-                setOnPreparedListener { mp ->
-                    state.isPrepared = true
-                    state.duration = runCatching { mp.duration }.getOrDefault(0)
-                    state.videoWidth = runCatching { mp.videoWidth }.getOrDefault(0)
-                    state.videoHeight = runCatching { mp.videoHeight }.getOrDefault(0)
-                }
-                setOnCompletionListener { state.isPlaying = false }
-                setOnErrorListener { _, _, _ ->
-                    state.isPrepared = false
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                val current = state.player ?: return
+                state.isPrepared = playbackState == Player.STATE_READY
+                state.isPlaying = current.isPlaying
+                if (playbackState == Player.STATE_ENDED) {
                     state.isPlaying = false
-                    true
+                    state.position = state.duration
                 }
-                prepareAsync()
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                state.isPlaying = isPlaying
+            }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                state.videoWidth = videoSize.width
+                state.videoHeight = videoSize.height
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                state.isPrepared = false
+                state.isPlaying = false
+            }
+        }
+
+        val created = runCatching {
+            ExoPlayer.Builder(context).build().apply {
+                addListener(listener)
+                setMediaItem(MediaItem.fromUri(Uri.parse(uri)))
+                prepare()
             }
         }.getOrNull()
 
@@ -622,7 +722,10 @@ private fun rememberMediaPlayback(uri: String): MediaPlaybackState {
         state.videoHeight = 0
 
         onDispose {
-            runCatching { created?.release() }
+            runCatching {
+                created?.removeListener(listener)
+                created?.release()
+            }
             state.player = null
             state.isPrepared = false
             state.isPlaying = false
@@ -633,26 +736,114 @@ private fun rememberMediaPlayback(uri: String): MediaPlaybackState {
         }
     }
 
+    LaunchedEffect(autoPlay, state.isPrepared) {
+        if (autoPlay && state.isPrepared) {
+            runCatching { state.player?.play() }
+        } else if (!autoPlay) {
+            runCatching { state.player?.pause() }
+        }
+    }
+
     LaunchedEffect(uri) {
         while (true) {
             delay(PROGRESS_TICK_MILLIS)
             val player = state.player ?: continue
             if (!state.isPrepared) continue
-            val target = state.seekTarget
-            if (target != null) {
-                state.seekTarget = null
-                runCatching { player.seekTo(target) }
-                state.position = target
-            } else {
-                state.position = runCatching { player.currentPosition }
-                    .getOrDefault(state.position)
-            }
+            state.position = runCatching { player.currentPosition.toInt() }
+                .getOrDefault(state.position)
             state.isPlaying = runCatching { player.isPlaying }.getOrDefault(false)
+            state.duration = runCatching { player.duration }
+                .getOrDefault(0L)
+                .let { if (it == C.TIME_UNSET || it < 0) 0 else it.toInt() }
         }
     }
 
     return state
 }
+
+private class ZoomTransformState {
+    var scale by mutableFloatStateOf(MIN_ZOOM)
+    var offset by mutableStateOf(Offset.Zero)
+    var containerSize by mutableStateOf(IntSize.Zero)
+
+    val isZoomed: Boolean get() = scale > ZOOM_RESET_EPSILON
+
+    fun apply(focus: Offset, pan: Offset, zoomChange: Float) {
+        val nextScale = (scale * zoomChange).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        if (nextScale <= MIN_ZOOM) {
+            reset()
+            return
+        }
+        val ratio = nextScale / scale
+        val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
+        val focusShift = (focus - center) * (1f - ratio)
+        val scaled = Offset(offset.x * ratio, offset.y * ratio)
+        scale = nextScale
+        val reachX = scaledContentReach(containerSize.width, nextScale)
+        val reachY = scaledContentReach(containerSize.height, nextScale)
+        offset = Offset(
+            x = (scaled.x + pan.x + focusShift.x).coerceIn(-reachX, reachX),
+            y = (scaled.y + pan.y + focusShift.y).coerceIn(-reachY, reachY)
+        )
+    }
+
+    private fun scaledContentReach(containerExtent: Int, contentScale: Float): Float {
+        if (containerExtent <= 0) return 0f
+        val scaledHalf = containerExtent * contentScale / 2f
+        return (scaledHalf - containerExtent / 2f).coerceAtLeast(0f)
+    }
+
+    fun reset() {
+        scale = MIN_ZOOM
+        offset = Offset.Zero
+    }
+}
+
+private suspend fun PointerInputScope.detectZoomTransformGestures(state: ZoomTransformState) {
+    val touchSlop = viewConfiguration.touchSlop
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false)
+        var pastTouchSlop = false
+        var previousSpan = 0f
+        do {
+            val event = awaitPointerEvent(PointerEventPass.Main)
+            val pressed = event.changes.filter { it.pressed }
+            if (pressed.isEmpty()) break
+
+            if (pressed.size >= 2) {
+                val span = spanOf(pressed[0].position, pressed[1].position)
+                val centroid = event.calculateCentroid()
+                if (previousSpan > 0f && span > 0f) {
+                    state.apply(focus = centroid, pan = Offset.Zero, zoomChange = span / previousSpan)
+                }
+                previousSpan = span
+            } else {
+                previousSpan = 0f
+                if (state.isZoomed) {
+                    val change = pressed.first()
+                    state.apply(
+                        focus = change.position,
+                        pan = change.position - change.previousPosition,
+                        zoomChange = 1f
+                    )
+                }
+            }
+
+            val zoomInProgress = pressed.size >= 2
+            if (!pastTouchSlop && (zoomInProgress || state.isZoomed)) {
+                var travelled = 0f
+                event.changes.forEach { travelled += (it.position - it.previousPosition).getDistance() }
+                if (travelled > touchSlop) pastTouchSlop = true
+            }
+
+            if (pastTouchSlop && (zoomInProgress || state.isZoomed)) {
+                event.changes.forEach { if (it.positionChanged()) it.consume() }
+            }
+        } while (event.changes.any { it.pressed })
+    }
+}
+
+private fun spanOf(a: Offset, b: Offset): Float = hypot(b.x - a.x, b.y - a.y)
 
 internal fun formatDuration(millis: Int): String {
     if (millis <= 0) return "0:00"

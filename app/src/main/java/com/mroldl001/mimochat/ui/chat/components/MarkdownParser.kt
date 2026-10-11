@@ -358,10 +358,12 @@ fun splitContent(text: String, allowUnclosedCodeFence: Boolean = false): List<Co
 private fun isMarkdownTableRow(line: String): Boolean =
     line.isNotBlank() && line.count { it == '|' } >= 1
 
+private val TABLE_DELIMITER_CELL = Regex("^:?-{3,}:?$")
+
 internal fun isMarkdownTableDelimiter(line: String): Boolean {
     val cells = line.trim().trim('|').split('|').map { it.trim() }
     if (cells.size < 2) return false
-    return cells.all { it.matches(Regex("^:?-{3,}:?\$")) }
+    return cells.all { it.matches(TABLE_DELIMITER_CELL) }
 }
 
 private fun markdownLineStart(text: String, lineIndex: Int): Int {

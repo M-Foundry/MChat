@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import android.util.Log
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Call
 import okhttp3.Callback
@@ -42,6 +43,10 @@ class ChatRepository @Inject constructor(
     private val okHttpClient: OkHttpClient,
     private val preferencesManager: PreferencesManager
 ) {
+    private companion object {
+        const val TAG = "ChatRepository"
+    }
+
     private val gson = Gson()
     private val searchResultsType = object : TypeToken<List<WebSearchResult>>() {}.type
     private val attachmentsType = object : TypeToken<List<MessageAttachment>>() {}.type
@@ -549,6 +554,7 @@ class ChatRepository @Inject constructor(
             try {
                 gson.fromJson<List<MessageAttachment>>(json, attachmentsType) ?: emptyList()
             } catch (e: Exception) {
+                Log.w(TAG, "解析消息 $id 的 attachments 失败", e)
                 emptyList()
             }
         } ?: listOfNotNull(

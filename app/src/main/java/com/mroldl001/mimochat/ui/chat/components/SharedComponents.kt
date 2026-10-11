@@ -41,6 +41,9 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -57,16 +60,20 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
-fun ThinkingCard(
-    reasoningContent: String,
-    modifier: Modifier = Modifier
+private fun CollapsibleCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
-    
+
     val rotation by animateFloatAsState(
         targetValue = if (isExpanded) 180f else 0f,
         animationSpec = tween(durationMillis = 200),
@@ -94,14 +101,14 @@ fun ThinkingCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.Psychology,
+                    imageVector = icon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = stringResource(R.string.thinking_process),
+                    text = title,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -118,18 +125,32 @@ fun ThinkingCard(
                         }
                 )
             }
-            
+
             if (isExpanded) {
-                Text(
-                    text = reasoningContent,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp)
-                )
+                content()
             }
         }
+    }
+}
+
+@Composable
+fun ThinkingCard(
+    reasoningContent: String,
+    modifier: Modifier = Modifier
+) {
+    CollapsibleCard(
+        icon = Icons.Default.Psychology,
+        title = stringResource(R.string.thinking_process),
+        modifier = modifier
+    ) {
+        Text(
+            text = reasoningContent,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp)
+        )
     }
 }
 
@@ -138,74 +159,21 @@ fun SearchResultsCard(
     searchResults: List<WebSearchResult>,
     modifier: Modifier = Modifier
 ) {
-    var isExpanded by remember { mutableStateOf(false) }
-    val interactionSource = remember { MutableInteractionSource() }
-    
-    val rotation by animateFloatAsState(
-        targetValue = if (isExpanded) 180f else 0f,
-        animationSpec = tween(durationMillis = 200),
-        label = "arrow_rotation"
-    )
-
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-        ),
-        modifier = modifier.fillMaxWidth()
+    CollapsibleCard(
+        icon = Icons.Default.Search,
+        title = stringResource(R.string.search_results),
+        modifier = modifier
     ) {
-        Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        interactionSource = interactionSource,
-                        indication = null
-                    ) { isExpanded = !isExpanded }
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.search_results),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                    imageVector = Icons.Default.ArrowDropDown,
-                    contentDescription = if (isExpanded) stringResource(R.string.collapse) else stringResource(R.string.expand),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .size(18.dp)
-                        .rotate(rotation)
-                        .offset {
-                            IntOffset(0, (-2).dp.roundToPx())
-                        }
-                )
-            }
-            
-            if (isExpanded) {
-                Column(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp)
-                ) {
-                    searchResults.forEachIndexed { index, result ->
-                        if (index > 0) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                        }
-                        SearchResultItem(result = result)
-                    }
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp)
+        ) {
+            searchResults.forEachIndexed { index, result ->
+                if (index > 0) {
+                    Spacer(modifier = Modifier.height(6.dp))
                 }
+                SearchResultItem(result = result)
             }
         }
     }
@@ -402,20 +370,17 @@ private fun QuoteBlockView(
     modifier: Modifier = Modifier
 ) {
     val quoteBar = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-    val quoteBackground = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
-            .padding(vertical = 2.dp)
-            .background(quoteBackground, RoundedCornerShape(8.dp))
-            .padding(vertical = 6.dp, horizontal = 12.dp)
+            .padding(vertical = 6.dp)
     ) {
         Box(
             modifier = Modifier
-                .width(4.dp)
+                .width(3.dp)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(2.dp))
+                .clip(RoundedCornerShape(1.5.dp))
                 .background(quoteBar)
         )
         Spacer(modifier = Modifier.width(12.dp))
@@ -436,8 +401,7 @@ private fun HrView() {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .height(1.dp)
                 .background(hrColor)
         )
     }
@@ -455,7 +419,7 @@ private fun MarkdownTableView(
             .map { line ->
                 line.removePrefix("|")
                     .removeSuffix("|")
-                    .split(Regex("(?<!\\\\)\\|"))
+                    .split(UNESCAPED_PIPE)
                     .map(String::trim)
             }
             .toList()
@@ -526,12 +490,18 @@ private fun MarkdownTableView(
     }
 }
 
+private val LATEX_BLOCK_DOLLAR = Regex("\\$\\$[\\s\\S]*?\\$\\$")
+private val LATEX_INLINE_DOLLAR = Regex("(?<!\\\\)\\$(?!\\$)[^$]*?\\$")
+private val LATEX_BRACKET = Regex("\\\\\\[[\\s\\S]*?\\\\\\]")
+private val LATEX_PAREN = Regex("\\\\\\([\\s\\S]*?\\\\\\)")
+private val UNESCAPED_PIPE = Regex("(?<!\\\\)\\|")
+
 private fun stripLatexForTableWidth(cell: String): String {
     return cell
-        .replace(Regex("\\$\\$[\\s\\S]*?\\$\\$"), "")
-        .replace(Regex("(?<!\\\\)\\$(?!\\$)[^$]*?\\$"), "")
-        .replace(Regex("\\\\\\[[\\s\\S]*?\\\\\\]"), "")
-        .replace(Regex("\\\\\\([\\s\\S]*?\\\\\\)"), "")
+        .replace(LATEX_BLOCK_DOLLAR, "")
+        .replace(LATEX_INLINE_DOLLAR, "")
+        .replace(LATEX_BRACKET, "")
+        .replace(LATEX_PAREN, "")
         .trim()
 }
 
@@ -543,6 +513,74 @@ private val winkFrames = listOf(
     R.drawable.ic_wink_4
 )
 
+private const val BREATH_MIN = 0.88f
+private const val BREATH_MAX = 1.12f
+
+private class WinkAnimationState {
+    var frameIndex by mutableIntStateOf(0)
+    val scaleX = Animatable(1f)
+    val scaleY = Animatable(1f)
+    val breath = Animatable(1f)
+
+    suspend fun loop() {
+        coroutineScope {
+            launch {
+                val breathSpec = tween<Float>(1100, easing = FastOutSlowInEasing)
+                while (true) {
+                    breath.animateTo(BREATH_MAX, breathSpec)
+                    breath.animateTo(BREATH_MIN, breathSpec)
+                }
+            }
+            launch { blinkLoop() }
+        }
+    }
+
+    private suspend fun blinkLoop() {
+        val idle = spring<Float>(dampingRatio = 0.45f, stiffness = 110f)
+        val bounce = spring<Float>(dampingRatio = 0.35f, stiffness = 320f)
+        while (true) {
+            scaleY.animateTo(1.05f, idle)
+            scaleY.animateTo(1f, idle)
+            delay(1100)
+            coroutineScope {
+                launch { scaleY.animateTo(0.86f, bounce) }
+                launch { scaleX.animateTo(1.10f, bounce) }
+                launch {
+                    for (i in 1..4) {
+                        frameIndex = i
+                        delay(45)
+                    }
+                    delay(140)
+                }
+            }
+            coroutineScope {
+                launch { scaleY.animateTo(1f, bounce) }
+                launch { scaleX.animateTo(1f, bounce) }
+                launch {
+                    for (i in 3 downTo 1) {
+                        frameIndex = i
+                        delay(45)
+                    }
+                    frameIndex = 0
+                }
+            }
+            delay(900)
+        }
+    }
+}
+
+@Composable
+private fun rememberWinkAnimation(): WinkAnimationState {
+    val state = remember { WinkAnimationState() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            state.loop()
+        }
+    }
+    return state
+}
+
 @Composable
 fun StreamingIndicator(
     modifier: Modifier = Modifier,
@@ -550,90 +588,16 @@ fun StreamingIndicator(
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val softer = lerp(primary, Color.White, 0.55f)
-    val beamStyle = rememberBeamingSpanStyle(softer, sweepDurationMillis = 1500, withGlow = false)
-    val actualStart = remember(startTime) {
-        if (startTime > 0L) startTime else System.currentTimeMillis()
-    }
-    var elapsedText by remember(actualStart) {
-        mutableStateOf(formatElapsedTime(System.currentTimeMillis() - actualStart))
-    }
-    var frameIndex by remember { mutableStateOf(0) }
-    val scaleX = remember { Animatable(1f) }
-    val scaleY = remember { Animatable(1f) }
+    val wink = rememberWinkAnimation()
 
-    LaunchedEffect(actualStart) {
-        while (true) {
-            delay(100)
-            elapsedText = formatElapsedTime(System.currentTimeMillis() - actualStart)
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        val idle = spring<Float>(dampingRatio = 0.45f, stiffness = 110f)
-        val bounce = spring<Float>(dampingRatio = 0.35f, stiffness = 320f)
-        while (true) {
-            scaleY.animateTo(1.05f, idle)
-            scaleY.animateTo(1f, idle)
-            delay(1100)
-            listOf(
-                async { scaleY.animateTo(0.86f, bounce) },
-                async { scaleX.animateTo(1.10f, bounce) },
-                async {
-                    for (i in 1..4) {
-                        frameIndex = i
-                        delay(45)
-                    }
-                    delay(140)
-                }
-            ).awaitAll()
-            listOf(
-                async { scaleY.animateTo(1f, bounce) },
-                async { scaleX.animateTo(1f, bounce) },
-                async {
-                    for (i in 3 downTo 1) {
-                        frameIndex = i
-                        delay(45)
-                    }
-                    frameIndex = 0
-                }
-            ).awaitAll()
-            delay(900)
-        }
-    }
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Start,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Image(
-            painter = painterResource(winkFrames[frameIndex]),
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(softer),
-            modifier = Modifier
-                .size(22.dp)
-                .scale(scaleX.value, scaleY.value)
-        )
-        Spacer(modifier = Modifier.width(2.dp))
-        Text(
-            text = buildAnnotatedString {
-                withStyle(
-                    style = beamStyle.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = MaterialTheme.typography.bodyMedium.fontSize
-                    )
-                ) {
-                    append(stringResource(R.string.ai_replying))
-                }
-            }
-        )
-        Spacer(modifier = Modifier.width(5.dp))
-        Text(
-            text = elapsedText,
-            style = MaterialTheme.typography.bodySmall,
-            color = softer
-        )
-    }
+    Image(
+        painter = painterResource(winkFrames[wink.frameIndex]),
+        contentDescription = null,
+        colorFilter = ColorFilter.tint(softer),
+        modifier = modifier
+            .size(22.dp)
+            .scale(wink.scaleX.value * wink.breath.value, wink.scaleY.value * wink.breath.value)
+    )
 }
 
 @Composable
@@ -670,45 +634,10 @@ internal fun BouncyWinkIcon(
     tint: Color? = null,
     onClick: (() -> Unit)? = null
 ) {
-    var frameIndex by remember { mutableStateOf(0) }
-    var clickSquash by remember { mutableStateOf(0) }
-    val scaleX = remember { Animatable(1f) }
-    val scaleY = remember { Animatable(1f) }
+    var clickSquash by remember { mutableIntStateOf(0) }
+    val wink = rememberWinkAnimation()
     val squashX = remember { Animatable(1f) }
     val squashY = remember { Animatable(1f) }
-
-    LaunchedEffect(Unit) {
-        val idle = spring<Float>(dampingRatio = 0.45f, stiffness = 110f)
-        val bounce = spring<Float>(dampingRatio = 0.35f, stiffness = 320f)
-        while (true) {
-            scaleY.animateTo(1.05f, idle)
-            scaleY.animateTo(1f, idle)
-            delay(1100)
-            listOf(
-                async { scaleY.animateTo(0.86f, bounce) },
-                async { scaleX.animateTo(1.10f, bounce) },
-                async {
-                    for (i in 1..4) {
-                        frameIndex = i
-                        delay(45)
-                    }
-                    delay(140)
-                }
-            ).awaitAll()
-            listOf(
-                async { scaleY.animateTo(1f, bounce) },
-                async { scaleX.animateTo(1f, bounce) },
-                async {
-                    for (i in 3 downTo 1) {
-                        frameIndex = i
-                        delay(45)
-                    }
-                    frameIndex = 0
-                }
-            ).awaitAll()
-            delay(900)
-        }
-    }
 
     LaunchedEffect(clickSquash) {
         if (clickSquash == 0) return@LaunchedEffect
@@ -724,7 +653,7 @@ internal fun BouncyWinkIcon(
     }
 
     Image(
-        painter = painterResource(winkFrames[frameIndex]),
+        painter = painterResource(winkFrames[wink.frameIndex]),
         contentDescription = contentDescription,
         colorFilter = if (tint != null) ColorFilter.tint(tint) else null,
         modifier = modifier
@@ -742,18 +671,7 @@ internal fun BouncyWinkIcon(
                     Modifier
                 }
             )
-            .scale(scaleX.value * squashX.value, scaleY.value * squashY.value)
+            .scale(wink.scaleX.value * squashX.value, wink.scaleY.value * squashY.value)
     )
 }
 
-private fun formatElapsedTime(elapsedMillis: Long): String {
-    val totalSeconds = elapsedMillis / 1000
-    val tenths = (elapsedMillis % 1000) / 100
-    return if (totalSeconds < 60) {
-        "${totalSeconds}.${tenths}s"
-    } else {
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        "${minutes}m ${seconds}.${tenths}s"
-    }
-}

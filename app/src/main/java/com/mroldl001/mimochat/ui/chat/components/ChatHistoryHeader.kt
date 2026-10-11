@@ -27,9 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,10 +40,8 @@ fun ChatHistoryHeader(
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onGitHubClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    onSettingsBoundsChanged: (Rect) -> Unit = {}
+    modifier: Modifier = Modifier
 ) {
-    val view = LocalView.current
     val displayTitle = if (title.isEmpty()) stringResource(R.string.chat_history) else title
     Row(
         modifier = modifier
@@ -101,7 +96,6 @@ fun ChatHistoryHeader(
                         )
                     },
                     contentDescription = stringResource(R.string.sidebar_settings),
-                    modifier = Modifier.onGloballyPositioned { onSettingsBoundsChanged(it.screenBounds(view)) },
                     onClick = onSettingsClick
                 )
                 IconCircleButton(

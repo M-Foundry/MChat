@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.sp
 import com.mroldl001.mimochat.R
 import com.mroldl001.mimochat.ui.chat.components.SettingsContainerDialog
 import com.mroldl001.mimochat.ui.chat.components.SettingsDialogIcon
-import com.mroldl001.mimochat.ui.chat.components.rememberSettingsTransition
 
 @Composable
 private fun LanguageOptionRow(
@@ -89,10 +88,7 @@ fun LanguageSettingsDialog(
     onLanguageSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val transition = rememberSettingsTransition()
     SettingsContainerDialog(
-        anchorBounds = Rect.Zero,
-        transition = transition,
         onDismissRequest = onDismiss,
         icon = { SettingsDialogIcon(Icons.Outlined.Language) },
         title = {

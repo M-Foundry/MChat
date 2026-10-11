@@ -81,7 +81,7 @@ internal fun LatexBlockImage(
         } ?: 10.dp
     }
 
-    if (result == null) {
+    val rendered = result ?: run {
         Box(
             modifier = modifier
                 .padding(vertical = blockVerticalPadding)
@@ -99,7 +99,7 @@ internal fun LatexBlockImage(
         }
         return
     }
-    val image = result!!.bitmap
+    val image = rendered.bitmap
     Box(
         modifier = modifier
             .padding(vertical = blockVerticalPadding)

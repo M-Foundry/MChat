@@ -87,8 +87,6 @@ internal fun BackgroundImageSettingsDialog(
     onSelectImage: () -> Unit,
     onOpacityChanged: (Float) -> Unit,
     onRestoreDefault: () -> Unit,
-    anchorBounds: Rect = Rect.Zero,
-    transition: SettingsTransition? = null,
     onDismiss: () -> Unit
 ) {
     var temporaryOpacity by remember(opacity) { mutableFloatStateOf(opacity) }
@@ -142,8 +140,8 @@ internal fun BackgroundImageSettingsDialog(
                                     opacityText = value
                                     val percentage = value.toFloatOrNull()
                                     opacityError = percentage == null || percentage !in 0f..100f
-                                    if (!opacityError) {
-                                        temporaryOpacity = percentage!! / 100f
+                                    if (percentage != null && percentage in 0f..100f) {
+                                        temporaryOpacity = percentage / 100f
                                     }
                                 },
                                 singleLine = true,

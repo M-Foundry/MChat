@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.dp
 import com.mroldl001.mimochat.R
 import com.mroldl001.mimochat.ui.chat.components.SettingsContainerDialog
 import com.mroldl001.mimochat.ui.chat.components.SettingsDialogIcon
-import com.mroldl001.mimochat.ui.chat.components.SettingsTransition
 
 private data class OpenSourceLibrary(
     val name: String,
@@ -49,7 +48,10 @@ private val openSourceGroups = listOf(
             OpenSourceLibrary("AndroidX Room", "Apache-2.0"),
             OpenSourceLibrary("AndroidX Hilt Navigation", "Apache-2.0"),
             OpenSourceLibrary("Hilt / Dagger", "Apache-2.0"),
+            OpenSourceLibrary("AndroidX Navigation Compose", "Apache-2.0"),
             OpenSourceLibrary("AndroidX Security Crypto", "Apache-2.0"),
+            OpenSourceLibrary("AndroidX Media3 ExoPlayer", "Apache-2.0"),
+            OpenSourceLibrary("AndroidX Media3 UI", "Apache-2.0"),
             OpenSourceLibrary("Gson", "Apache-2.0")
         )
     ),
@@ -73,7 +75,9 @@ private val openSourceGroups = listOf(
         libraries = listOf(
             OpenSourceLibrary("Simple Icons", "CC0-1.0"),
             OpenSourceLibrary("Coil", "Apache-2.0"),
-            OpenSourceLibrary("compose-markdown", "MIT"),
+            OpenSourceLibrary("kotlin-textmate-core", "Apache-2.0"),
+            OpenSourceLibrary("ZoomImage", "Apache-2.0"),
+            OpenSourceLibrary("jeziellago/compose-markdown", "MIT"),
             OpenSourceLibrary("Markwon", "Apache-2.0"),
             OpenSourceLibrary("JLaTeXMath", "GPL-2.0-or-later")
         )
@@ -82,12 +86,9 @@ private val openSourceGroups = listOf(
 
 @Composable
 internal fun OpenSourceLibrariesDialog(
-    transition: SettingsTransition,
     onDismiss: () -> Unit
 ) {
     SettingsContainerDialog(
-        anchorBounds = Rect.Zero,
-        transition = transition,
         onDismissRequest = onDismiss,
         icon = { SettingsDialogIcon(Icons.Outlined.Code) },
         title = {

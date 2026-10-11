@@ -12,11 +12,14 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Css
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
@@ -37,31 +40,107 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.CancellationException
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import dev.textmate.theme.FontStyle as TextMateFontStyle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 @Composable
 internal fun CodeBlockView(code: String, info: String?) {
     val context = LocalContext.current
+    val activityRootView = LocalView.current.rootView
     val darkCodeBlock = LocalCodeBlockDark.current
     val palette = codeBlockPalette(darkCodeBlock)
     val lines = code.replace("\r\n", "\n").replace('\r', '\n').split("\n")
     val fenceLabel = info?.trim()?.substringBefore(' ').orEmpty()
     val normalizedLanguage = normalizeCodeLanguage(fenceLabel)
-    val language = normalizedLanguage.takeIf { it in supportedCodeLanguages }
+    val language = normalizedLanguage.takeIf { hasGrammar(context, it) }
     val codeLines = lines
-    
+    var fullscreen by remember { mutableStateOf(false) }
+    var overlayMounted by remember { mutableStateOf(false) }
+    val fullscreenProgress = remember { Animatable(0f) }
+    var originBounds by remember { mutableStateOf<CodeBlockBounds?>(null) }
+    var activityWindowOrigin by remember { mutableStateOf(Offset.Zero) }
+    var blockCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+
+    LaunchedEffect(fullscreen) {
+        if (fullscreen) {
+            overlayMounted = true
+            fullscreenProgress.animateTo(
+                1f,
+                spring(
+                    dampingRatio = 0.86f,
+                    stiffness = 380f
+                )
+            )
+        } else {
+            fullscreenProgress.animateTo(
+                0f,
+                spring(
+                    dampingRatio = 0.9f,
+                    stiffness = 460f
+                )
+            )
+            overlayMounted = false
+        }
+    }
+
     val lineCount = codeLines.size
     val maxLineNumberWidth = lineCount.toString().length
-    val highlightedLines = remember(codeLines, language, darkCodeBlock) {
-        highlightCodeLines(codeLines, language, darkCodeBlock)
+    val appContext = context.applicationContext
+    val codeHScroll = rememberScrollState()
+    val highlightedLines by produceState(
+        initialValue = codeLines.map { AnnotatedString(it) },
+        codeLines,
+        language,
+        darkCodeBlock
+    ) {
+        value = withContext(Dispatchers.Default) {
+            try {
+                highlightCodeLines(codeLines, language, darkCodeBlock, appContext)
+            } catch (error: Throwable) {
+                codeLines.map { AnnotatedString(it) }
+            }
+        }
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 12.dp)
+            .onGloballyPositioned { blockCoordinates = it }
             .background(
                 color = palette.background,
                 shape = RoundedCornerShape(8.dp)
@@ -96,7 +175,7 @@ internal fun CodeBlockView(code: String, info: String?) {
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
-             
+
             IconButton(
                 onClick = {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -104,60 +183,575 @@ internal fun CodeBlockView(code: String, info: String?) {
                     clipboard.setPrimaryClip(clip)
                     Toast.makeText(context, context.getString(R.string.toast_code_copied), Toast.LENGTH_SHORT).show()
                 },
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(CODE_TOOLBAR_BUTTON)
             ) {
                 Icon(
                     imageVector = Icons.Default.ContentCopy,
                     contentDescription = stringResource(R.string.copy_code),
                     tint = palette.muted,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(COPY_ICON_SIZE)
+                )
+            }
+
+            IconButton(
+                onClick = {
+                    val loc = IntArray(2)
+                    activityRootView?.getLocationOnScreen(loc)
+                    activityWindowOrigin = Offset(loc[0].toFloat(), loc[1].toFloat())
+                    val bounds = blockCoordinates?.boundsInWindow()
+                    originBounds = bounds?.let {
+                        CodeBlockBounds(
+                            left = it.left.roundToInt(),
+                            top = it.top.roundToInt(),
+                            right = it.right.roundToInt(),
+                            bottom = it.bottom.roundToInt()
+                        )
+                    }
+                    fullscreen = true
+                },
+                modifier = Modifier.size(CODE_TOOLBAR_BUTTON)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Fullscreen,
+                    contentDescription = stringResource(R.string.code_fullscreen),
+                    tint = palette.muted,
+                    modifier = Modifier.size(FULLSCREEN_ICON_SIZE)
                 )
             }
         }
         
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp)
-                .padding(bottom = 12.dp)
+Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .padding(bottom = 12.dp)
+    ) {
+        CodeBody(
+            highlightedLines = highlightedLines,
+            maxLineNumberWidth = maxLineNumberWidth,
+            textColor = palette.text,
+            numberColor = palette.muted,
+            horizontalState = codeHScroll,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+    if (overlayMounted) {
+        Dialog(
+            onDismissRequest = { fullscreen = false },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
         ) {
-            // 行号列：不参与横向滚动，始终冻结在左侧
-            Column {
-                highlightedLines.forEachIndexed { index, _ ->
-                    Text(
-                        text = (index + 1).toString().padStart(maxLineNumberWidth, ' '),
-                        modifier = Modifier.widthIn(min = (maxLineNumberWidth * 10).dp),
-                        style = TextStyle(
-                            color = palette.muted,
-                            fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    )
+            CodeFullscreenOverlay(
+                highlightedLines = highlightedLines,
+                maxLineNumberWidth = maxLineNumberWidth,
+                palette = palette,
+                fenceLabel = fenceLabel,
+                normalizedLanguage = normalizedLanguage,
+                rawCode = code,
+                animatedProgress = fullscreenProgress.value,
+                originBounds = originBounds,
+                activityWindowOrigin = activityWindowOrigin,
+                onDismiss = { fullscreen = false },
+                onCopy = {
+                    val clipboard =
+                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("code", it))
+                    Toast.makeText(context, context.getString(R.string.toast_code_copied), Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CodeFullscreenOverlay(
+    highlightedLines: List<AnnotatedString>,
+    maxLineNumberWidth: Int,
+    palette: CodeBlockPalette,
+    fenceLabel: String,
+    normalizedLanguage: String,
+    rawCode: String,
+    animatedProgress: Float,
+    originBounds: CodeBlockBounds?,
+    activityWindowOrigin: Offset,
+    onDismiss: () -> Unit,
+    onCopy: (String) -> Unit
+) {
+    val vScroll = rememberScrollState()
+    val hScroll = rememberScrollState()
+    val hBarVisible by rememberScrollbarVisibility(hScroll)
+    val vBarVisible by rememberScrollbarVisibility(vScroll)
+    val anyActive by rememberScrollActivity(vScroll, hScroll)
+    val bg = Color(0xFF0D0D0D)
+
+    var predictiveBackProgress by remember { mutableFloatStateOf(0f) }
+    val backScale by remember { derivedStateOf { 1f - predictiveBackProgress * 0.08f } }
+    val backAlpha by remember { derivedStateOf { 1f - predictiveBackProgress * 0.35f } }
+
+    PredictiveBackHandler { progress ->
+        try {
+            progress.collect { backEvent ->
+                predictiveBackProgress = backEvent.progress
+            }
+            predictiveBackProgress = 1f
+            onDismiss()
+        } catch (_: CancellationException) {
+            predictiveBackProgress = 0f
+        }
+    }
+
+    BackHandler(onBack = onDismiss)
+
+    val view = LocalView.current
+    val dialogWindow = remember(view) { (view as? DialogWindowProvider)?.window }
+    val overlayRootView = view.rootView
+
+    DisposableEffect(Unit) {
+        dialogWindow?.setBackgroundDrawable(
+            android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+        )
+        dialogWindow?.setDimAmount(0f)
+        onDispose { }
+    }
+
+    DisposableEffect(dialogWindow) {
+        val target = dialogWindow
+        if (target != null) {
+            runCatching {
+                // targetSdk 35+ 起 statusBarColor 对已 edge-to-edge 的窗口失效，
+                // 必须让 Dialog 自己画到状态栏背后，否则状态栏仍是透明/原色
+                WindowCompat.setDecorFitsSystemWindows(target, false)
+                @Suppress("DEPRECATION")
+                run {
+                    target.statusBarColor = bg.toArgb()
+                    target.navigationBarColor = bg.toArgb()
+                }
+                WindowCompat.getInsetsController(target, target.decorView).apply {
+                    isAppearanceLightStatusBars = false
+                    isAppearanceLightNavigationBars = false
                 }
             }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // 代码列：只有这部分横向滚动，行号不受影响
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .horizontalScroll(rememberScrollState())
-            ) {
-                highlightedLines.forEach { line ->
-                    Text(
-                        text = if (line.isEmpty()) AnnotatedString(" ") else line,
-                        style = TextStyle(
-                            color = palette.text,
-                            fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    )
+        }
+        onDispose {
+            if (target != null) {
+                runCatching {
+                    @Suppress("DEPRECATION")
+                    run {
+                        target.statusBarColor = android.graphics.Color.TRANSPARENT
+                        target.navigationBarColor = android.graphics.Color.TRANSPARENT
+                    }
                 }
             }
         }
     }
+
+    val overlayWindowOrigin = remember { mutableStateOf(Offset.Zero) }
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned {
+                // rootView 就是 Dialog 自己的 DecorView，直接取它在屏幕上的位置；
+                // 不能经 findActivity() —— Dialog 的 context 不是 Activity，会拿到 null
+                val loc = IntArray(2)
+                overlayRootView?.getLocationOnScreen(loc)
+                overlayWindowOrigin.value = Offset(loc[0].toFloat(), loc[1].toFloat())
+            }
+    ) {
+        val density = LocalDensity.current
+        val overlayWidthPx = with(density) { maxWidth.toPx() }
+        val overlayHeightPx = with(density) { maxHeight.toPx() }
+
+        // originBounds 是 Activity window 内的坐标，overlay 在 Dialog window 内，
+        // 两者原点不同，必须各自换算到屏幕坐标再相减，否则动画起点会纵向偏移
+        val origin = originBounds
+        val overlayOrigin = overlayWindowOrigin.value
+        val containerGeometry = remember(origin, overlayOrigin, overlayWidthPx, overlayHeightPx) {
+            if (origin == null || origin.width() <= 0 || origin.height() <= 0 ||
+                overlayWidthPx <= 0f || overlayHeightPx <= 0f
+            ) {
+                FULLSCREEN_GEOMETRY
+            } else {
+                val originScreenLeft = origin.left + activityWindowOrigin.x
+                val originScreenTop = origin.top + activityWindowOrigin.y
+                val originCenterX = originScreenLeft - overlayOrigin.x + origin.width() / 2f
+                val originCenterY = originScreenTop - overlayOrigin.y + origin.height() / 2f
+                ContainerGeometry(
+                    offsetX = originCenterX - overlayWidthPx / 2f,
+                    offsetY = originCenterY - overlayHeightPx / 2f,
+                    scaleX = (origin.width().toFloat() / overlayWidthPx).coerceIn(0.05f, 1f),
+                    scaleY = (origin.height().toFloat() / overlayHeightPx).coerceIn(0.05f, 1f),
+                    corner = CODE_BLOCK_CORNER.dp
+                )
+            }
+        }
+
+        val resolved = containerGeometry.interpolateTo(FULLSCREEN_GEOMETRY, animatedProgress)
+        val contentAlpha = FastOutSlowInEasing.transform(animatedProgress.coerceIn(0f, 1f))
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = resolved.offsetX
+                    translationY = resolved.offsetY
+                    scaleX = resolved.scaleX * backScale
+                    scaleY = resolved.scaleY * backScale
+                    transformOrigin = TransformOrigin.Center
+                }
+                .clipToBounds()
+                .background(bg, RoundedCornerShape(resolved.corner))
+        ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = contentAlpha * backAlpha }
+                .statusBarsPadding()
+                .navigationBarsPadding()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                codeLanguageIcon(normalizedLanguage)?.let { icon ->
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = Color(0xFF9AA0A6),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    text = fenceLabel.ifEmpty { stringResource(R.string.code_block) },
+                    style = TextStyle(
+                        color = Color(0xFF9AA0A6),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { onCopy(rawCode) }) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = stringResource(R.string.copy_code),
+                        tint = Color(0xFF9AA0A6),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.close_fullscreen),
+                        tint = Color(0xFF9AA0A6),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clipToBounds()
+                    .pointerInput(Unit) {
+                        detectTapGestures { onDismiss() }
+                    }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(vScroll)
+                ) {
+                    CodeBody(
+                        highlightedLines = highlightedLines,
+                        maxLineNumberWidth = maxLineNumberWidth,
+                        textColor = Color.White,
+                        numberColor = Color(0xFF5F6368),
+                        horizontalState = hScroll,
+                        showHorizontalBar = false,
+                        fillHeight = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 32.dp, bottom = 24.dp)
+                    )
+                }
+
+                CodeVerticalScrollbar(
+                    state = vScroll,
+                    visible = anyActive && vBarVisible,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(horizontal = SCROLLBAR_GAP)
+                )
+
+                CodeHorizontalScrollbar(
+                    state = hScroll,
+                    visible = anyActive && hBarVisible,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(top = SCROLLBAR_GAP)
+                )
+            }
+        }
+        }
+    }
 }
+
+@Composable
+private fun CodeBody(
+    highlightedLines: List<AnnotatedString>,
+    maxLineNumberWidth: Int,
+    textColor: Color,
+    numberColor: Color,
+    horizontalState: ScrollState,
+    showHorizontalBar: Boolean = true,
+    fillHeight: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val hBarVisible by rememberScrollbarVisibility(horizontalState)
+    val hBarActive by rememberScrollActivity(horizontalState)
+    val numberStyle = codeLineStyle(numberColor)
+    val textStyle = codeLineStyle(textColor)
+
+    Box(modifier) {
+        Column(
+            modifier = if (fillHeight) {
+                Modifier.fillMaxSize()
+            } else {
+                Modifier.fillMaxWidth()
+            }.horizontalScroll(horizontalState)
+        ) {
+            highlightedLines.forEachIndexed { index, line ->
+                Row {
+                    Text(
+                        text = (index + 1).toString().padStart(maxLineNumberWidth, ' '),
+                        style = numberStyle,
+                        modifier = Modifier
+                            .width(numberColumnWidth(maxLineNumberWidth))
+                            .alignByBaseline()
+                    )
+                    Text(
+                        text = line.ifEmpty { AnnotatedString(" ") },
+                        style = textStyle,
+                        modifier = Modifier
+                            .padding(start = CODE_GUTTER)
+                            .alignByBaseline()
+                    )
+                }
+            }
+            if (fillHeight) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                )
+            }
+        }
+
+        if (showHorizontalBar) {
+            CodeHorizontalScrollbar(
+                state = horizontalState,
+                visible = hBarActive && hBarVisible,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 2.dp)
+                    .padding(top = SCROLLBAR_GAP)
+            )
+        }
+    }
+}
+
+private fun numberColumnWidth(digits: Int): Dp =
+    (CODE_FONT_SIZE.value * 0.62f * digits).dp + CODE_GUTTER
+
+private fun android.view.View.findActivity(): android.app.Activity? {
+    var current = context
+    while (current is android.content.ContextWrapper) {
+        if (current is android.app.Activity) return current
+        current = current.baseContext
+    }
+    return null
+}
+
+private fun codeLineStyle(color: Color) = TextStyle(
+    color = color,
+    fontSize = CODE_FONT_SIZE,
+    lineHeight = CODE_LINE_HEIGHT,
+    fontFamily = FontFamily.Monospace
+)
+
+@Composable
+private fun CodeHorizontalScrollbar(
+    state: ScrollState,
+    visible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(SCROLLBAR_FADE_MILLIS, easing = FastOutSlowInEasing),
+        label = "hBarAlpha"
+    )
+    BoxWithConstraints(
+        modifier
+            .fillMaxWidth()
+            .height(SCROLLBAR_TRACK_HEIGHT)
+    ) {
+        val density = LocalDensity.current
+        val viewportPx = with(density) { maxWidth.toPx() }
+        val contentPx = viewportPx + state.maxValue
+        if (contentPx > 0f && viewportPx > 0f) {
+            val thumbWidth = viewportPx * (viewportPx / contentPx).coerceAtLeast(SCROLLBAR_MIN_FRACTION)
+            val travel = viewportPx - thumbWidth
+            val fraction = if (state.maxValue > 0) state.value.toFloat() / state.maxValue else 0f
+            Box(
+                modifier = Modifier
+                    .graphicsLayer {
+                        this.alpha = alpha
+                        translationX = travel * fraction
+                        scaleX = (thumbWidth / viewportPx).coerceAtLeast(SCROLLBAR_MIN_FRACTION)
+                        transformOrigin = TransformOrigin(0f, 0.5f)
+                    }
+                    .fillMaxHeight()
+                    .fillMaxWidth()
+                    .background(color = SCROLLBAR_THUMB, shape = RoundedCornerShape(50))
+            )
+        }
+    }
+}
+
+@Composable
+private fun CodeVerticalScrollbar(
+    state: ScrollState,
+    visible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(SCROLLBAR_FADE_MILLIS, easing = FastOutSlowInEasing),
+        label = "vBarAlpha"
+    )
+    BoxWithConstraints(modifier.fillMaxHeight().width(SCROLLBAR_TRACK_WIDTH)) {
+        val density = LocalDensity.current
+        val viewportPx = with(density) { maxHeight.toPx() }
+        val contentPx = viewportPx + state.maxValue
+        if (contentPx > 0f && viewportPx > 0f) {
+            val thumbHeight = viewportPx * (viewportPx / contentPx).coerceAtLeast(SCROLLBAR_MIN_FRACTION)
+            val travel = viewportPx - thumbHeight
+            val fraction = if (state.maxValue > 0) state.value.toFloat() / state.maxValue else 0f
+            Box(
+                modifier = Modifier
+                    .graphicsLayer {
+                        this.alpha = alpha
+                        translationY = travel * fraction
+                        scaleY = (thumbHeight / viewportPx).coerceAtLeast(SCROLLBAR_MIN_FRACTION)
+                        transformOrigin = TransformOrigin(0.5f, 0f)
+                    }
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .background(color = SCROLLBAR_THUMB, shape = RoundedCornerShape(50))
+            )
+        }
+    }
+}
+
+@Composable
+private fun rememberScrollbarVisibility(state: ScrollState): State<Boolean> {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(state) {
+        snapshotFlow { state.maxValue > 0 }.collect { hasRange ->
+            visible = hasRange
+        }
+    }
+    return rememberUpdatedState(visible)
+}
+
+@Composable
+private fun rememberScrollActivity(vararg states: ScrollState): State<Boolean> {
+    var active by remember { mutableStateOf(false) }
+    LaunchedEffect(*states) {
+        var hideJob: Job? = null
+        var previous = states.map { it.value }
+        snapshotFlow { states.map { it.value to it.isScrollInProgress } }
+            .collect { snapshot ->
+                val scrolling = snapshot.any { it.second }
+                val moved = snapshot.indices.any { snapshot[it].first != previous[it] }
+                previous = snapshot.map { it.first }
+                if (scrolling || moved) {
+                    hideJob?.cancel()
+                    hideJob = null
+                    if (!active) active = true
+                    if (!scrolling) {
+                        hideJob = launch { delay(SCROLLBAR_HIDE_DELAY); active = false }
+                    }
+                } else if (active && hideJob == null) {
+                    hideJob = launch { delay(SCROLLBAR_HIDE_DELAY); active = false }
+                }
+            }
+    }
+    return rememberUpdatedState(active)
+}
+
+
+private val CODE_FONT_SIZE = 13.sp
+private val CODE_LINE_HEIGHT = 22.sp
+private const val CODE_BLOCK_CORNER = 8
+private const val FULLSCREEN_CORNER = 0
+
+internal data class CodeBlockBounds(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int
+) {
+    fun width(): Int = right - left
+    fun height(): Int = bottom - top
+}
+
+private data class ContainerGeometry(
+    val offsetX: Float,
+    val offsetY: Float,
+    val scaleX: Float,
+    val scaleY: Float,
+    val corner: Dp
+)
+
+private val FULLSCREEN_GEOMETRY = ContainerGeometry(
+    offsetX = 0f,
+    offsetY = 0f,
+    scaleX = 1f,
+    scaleY = 1f,
+    corner = 0.dp
+)
+
+private fun ContainerGeometry.interpolateTo(target: ContainerGeometry, fraction: Float): ContainerGeometry =
+    ContainerGeometry(
+        offsetX = offsetX + (target.offsetX - offsetX) * fraction,
+        offsetY = offsetY + (target.offsetY - offsetY) * fraction,
+        scaleX = scaleX + (target.scaleX - scaleX) * fraction,
+        scaleY = scaleY + (target.scaleY - scaleY) * fraction,
+        corner = (corner + (target.corner - corner) * fraction).coerceAtLeast(0.dp)
+    )
+private val CODE_GUTTER = 14.dp
+private val COPY_ICON_SIZE = 18.dp
+private val FULLSCREEN_ICON_SIZE = COPY_ICON_SIZE / FULLSCREEN_INK_RATIO
+private val CODE_TOOLBAR_BUTTON = 34.dp
+private const val FULLSCREEN_INK_RATIO = 0.64f
+private const val SCROLLBAR_HIDE_DELAY = 700L
+private const val SCROLLBAR_FADE_MILLIS = 220
+private val SCROLLBAR_GAP = 8.dp
+private val SCROLLBAR_TRACK_HEIGHT = 5.dp
+private val SCROLLBAR_TRACK_WIDTH = 5.dp
+private val SCROLLBAR_THUMB = Color(0x66FFFFFF)
+private const val SCROLLBAR_MIN_FRACTION = 0.12f
 
 private fun codeLanguageIcon(language: String?): ImageVector? {
     if (language == null) return Icons.Default.Code
@@ -174,27 +768,21 @@ private fun codeLanguageIcon(language: String?): ImageVector? {
     }
 }
 
-private val supportedCodeLanguages = setOf(
-    "python", "javascript", "typescript", "java", "kotlin", "c", "cpp", "csharp",
-    "go", "rust", "swift", "php", "ruby", "shell", "powershell", "sql", "dart",
-    "html", "xml", "css", "scss", "json", "yaml", "toml", "lua", "r", "text"
-)
-
 private fun normalizeCodeLanguage(label: String): String {
     return when (label.lowercase().substringBefore(' ').trim()) {
         "py", "python3" -> "python"
-        "js", "jsx", "node" -> "javascript"
-        "ts", "tsx" -> "typescript"
+        "js", "mjs", "cjs", "node" -> "javascript"
+        "ts", "mts", "cts" -> "typescript"
         "kt", "kts" -> "kotlin"
-        "c++", "cc", "cxx" -> "cpp"
+        "c++", "cc", "cxx", "hpp" -> "cpp"
         "c#", "cs" -> "csharp"
         "golang" -> "go"
         "rs" -> "rust"
-        "sh", "zsh" -> "shell"
+        "sh", "zsh", "shell", "shellscript" -> "shellscript"
         "bash", "pwsh", "ps1" -> "powershell"
         "htm" -> "html"
         "yml" -> "yaml"
-        "pl" -> "perl"
+        "pl", "perl" -> "perl"
         "hs" -> "haskell"
         "ex", "exs" -> "elixir"
         "erl" -> "erlang"
@@ -202,62 +790,36 @@ private fun normalizeCodeLanguage(label: String): String {
         "jl" -> "julia"
         "sol" -> "solidity"
         "gql" -> "graphql"
-        "f90", "f95", "f03" -> "fortran"
+        "f90", "f95", "f03" -> "fortran-free-form"
         "cr" -> "crystal"
         "ml", "mli" -> "ocaml"
         "fs", "fsi", "fsx" -> "fsharp"
         "rkt" -> "racket"
-        "lisp", "cl" -> "commonlisp"
+        "lisp", "cl", "el" -> "common-lisp"
         "adb", "ads" -> "ada"
-        "purs" -> "purescript"
-        "re", "rei" -> "reason"
-        "res", "resi" -> "rescript"
+        "purs", "rescript" -> "purescript"
         "hx" -> "haxe"
-        "ipynb" -> "jupyter"
-        "wl", "nb" -> "wolframmathematica"
+        "wl", "nb", "mathematica" -> "wolfram"
         "tex" -> "latex"
-        "md" -> "markdown"
+        "md", "mkd" -> "markdown"
         "dockerfile" -> "docker"
-        ".env", "dotenv" -> "env"
+        ".env", "dotenv" -> "dotenv"
         "tf", "tfvars" -> "terraform"
-        "el" -> "gnuemacs"
-        "mysql" -> "mysql"
-        "postgres", "postgresql", "psql" -> "postgresql"
+        "el", "emacs", "gnuemacs" -> "emacs-lisp"
+        "proto" -> "proto"
+        "make" -> "make"
+        "objc" -> "objective-c"
+        "objcpp" -> "objective-cpp"
+        "coffee", "coffeescript" -> "coffee"
+        "htmles" -> "html-derivative"
+        "cshtml" -> "razor"
+        "restructuredtext", "rst" -> "rst"
+        "f#" -> "fsharp"
+        "vb", "vbnet" -> "vb"
         "plaintext", "txt" -> "text"
         else -> label.lowercase().substringBefore(' ').trim()
     }
 }
-
-private data class CodeHighlightPalette(
-    val keyword: Color = Color(0xFFC792EA),
-    val string: Color = Color(0xFFC3E88D),
-    val number: Color = Color(0xFFF78C6C),
-    val comment: Color = Color(0xFF7C8495),
-    val type: Color = Color(0xFFFFCB6B),
-    val function: Color = Color(0xFF82AAFF),
-    val operator: Color = Color(0xFF89DDFF),
-    val annotation: Color = Color(0xFFFF5370),
-    val property: Color = Color(0xFFF07178)
-)
-
-private val codeKeywords = setOf(
-    "as", "async", "await", "break", "case", "catch", "class", "const", "continue",
-    "def", "default", "do", "else", "enum", "export", "extends", "false", "final",
-    "finally", "for", "from", "fun", "function", "if", "implements", "import", "in",
-    "interface", "internal", "is", "lambda", "let", "match", "module", "new", "nil",
-    "none", "null", "object", "open", "override", "package", "pass", "private",
-    "protected", "public", "raise", "readonly", "return", "sealed", "static", "struct",
-    "super", "switch", "this", "throw", "throws", "trait", "true", "try", "typealias",
-    "typeof", "using", "val", "var", "virtual", "void", "when", "where", "while", "with",
-    "yield", "select", "insert", "update", "delete", "create", "drop", "alter", "join",
-    "into", "values", "and", "or", "not", "then", "end", "local", "func", "defer", "go"
-)
-
-private val codeTypes = setOf(
-    "any", "bool", "boolean", "byte", "char", "decimal", "double", "dynamic", "float",
-    "int", "integer", "long", "never", "number", "object", "short", "string", "uint",
-    "ulong", "ushort", "unit", "unknown", "list", "map", "set", "dict", "tuple", "array"
-)
 
 internal data class CodeBlockPalette(
     val background: Color,
@@ -304,21 +866,6 @@ internal val LightCodeBlockPalette = CodeBlockPalette(
     property = Color(0xFF116329)
 )
 
-private fun CodeHighlightPalette(dark: Boolean = true): CodeHighlightPalette {
-    val source = if (dark) DarkCodeBlockPalette else LightCodeBlockPalette
-    return CodeHighlightPalette(
-        keyword = source.keyword,
-        string = source.string,
-        number = source.number,
-        comment = source.comment,
-        type = source.type,
-        function = source.function,
-        operator = source.operator,
-        annotation = source.annotation,
-        property = source.property
-    )
-}
-
 // 浅色用 primary 6% 叠白而非纯白：跟主题联动，又不压过语法高亮
 @Composable
 internal fun codeBlockPalette(dark: Boolean): CodeBlockPalette {
@@ -336,145 +883,46 @@ internal fun codeBlockPalette(dark: Boolean): CodeBlockPalette {
 private fun highlightCodeLines(
     lines: List<String>,
     language: String?,
-    dark: Boolean = true
+    dark: Boolean,
+    context: Context
 ): List<AnnotatedString> {
-    val palette = CodeHighlightPalette(dark)
-    var inBlockComment = false
-    var multiLineStringDelimiter: String? = null
-    val lineCommentMarkers = when (language) {
-        "python", "ruby", "shell", "powershell", "yaml", "r" -> listOf("#")
-        "sql", "lua" -> listOf("--")
-        "text" -> emptyList()
-        else -> listOf("//")
-    }
-    val blockMarkers = when (language) {
-        "html", "xml" -> "<!--" to "-->"
-        "python", "ruby", "shell", "powershell", "yaml", "r", "text" -> null
-        else -> "/*" to "*/"
-    }
+    val plain = lines.map { AnnotatedString(it) }
+    if (language == null) return plain
+    return try {
+        val palette = if (dark) DarkCodeBlockPalette else LightCodeBlockPalette
+        val grammar = codeGrammar(context, language) ?: return plain
+        val tokens = codeTokens(grammar, lines)
+        val theme = codeTheme(dark, palette)
+        val defaultColor = palette.text
 
-    return lines.map { line ->
-        buildAnnotatedString {
-            var index = 0
-            while (index < line.length) {
-                val activeDelimiter = multiLineStringDelimiter
-                if (activeDelimiter != null) {
-                    val end = line.indexOf(activeDelimiter, index)
-                    val tokenEnd = if (end >= 0) end + activeDelimiter.length else line.length
-                    withStyle(SpanStyle(color = palette.string)) {
-                        append(line.substring(index, tokenEnd))
-                    }
-                    index = tokenEnd
-                    if (end >= 0) multiLineStringDelimiter = null
-                    continue
+        lines.mapIndexed { index, line ->
+            if (line.isEmpty()) return@mapIndexed AnnotatedString("")
+            val resolved = tokens.getOrNull(index).orEmpty().map { token ->
+                Pair(token, resolveStyle(theme, token.scopes))
+            }
+            buildAnnotatedString {
+                append(line)
+                resolved.forEach { (token, style) ->
+                    val start = token.start.coerceIn(0, line.length)
+                    val end = token.end.coerceIn(start, line.length)
+                    if (end <= start) return@forEach
+                    val resolvedColor = style?.foreground
+                        ?.takeIf { it != 0L }
+                        ?.let { Color(textMateForegroundColor(it)) }
+                    val italic = style?.fontStyle?.any { it == TextMateFontStyle.ITALIC } == true
+                    if (resolvedColor == null && !italic) return@forEach
+                    addStyle(
+                        SpanStyle(
+                            color = resolvedColor ?: defaultColor,
+                            fontStyle = if (italic) FontStyle.Italic else null
+                        ),
+                        start,
+                        end
+                    )
                 }
-
-                if (inBlockComment && blockMarkers != null) {
-                    val end = line.indexOf(blockMarkers.second, index)
-                    val tokenEnd = if (end >= 0) end + blockMarkers.second.length else line.length
-                    withStyle(SpanStyle(color = palette.comment, fontStyle = FontStyle.Italic)) {
-                        append(line.substring(index, tokenEnd))
-                    }
-                    index = tokenEnd
-                    if (end >= 0) inBlockComment = false
-                    continue
-                }
-
-                val blockStart = blockMarkers?.first
-                if (blockStart != null && line.startsWith(blockStart, index)) {
-                    val end = line.indexOf(blockMarkers.second, index + blockStart.length)
-                    val tokenEnd = if (end >= 0) end + blockMarkers.second.length else line.length
-                    withStyle(SpanStyle(color = palette.comment, fontStyle = FontStyle.Italic)) {
-                        append(line.substring(index, tokenEnd))
-                    }
-                    index = tokenEnd
-                    if (end < 0) inBlockComment = true
-                    continue
-                }
-
-                val commentMarker = lineCommentMarkers.firstOrNull { line.startsWith(it, index) }
-                if (commentMarker != null) {
-                    withStyle(SpanStyle(color = palette.comment, fontStyle = FontStyle.Italic)) {
-                        append(line.substring(index))
-                    }
-                    index = line.length
-                    continue
-                }
-
-                val tripleDelimiter = when {
-                    language == "python" && line.startsWith("\"\"\"", index) -> "\"\"\""
-                    language == "python" && line.startsWith("'''", index) -> "'''"
-                    else -> null
-                }
-                if (tripleDelimiter != null) {
-                    val end = line.indexOf(tripleDelimiter, index + tripleDelimiter.length)
-                    val tokenEnd = if (end >= 0) end + tripleDelimiter.length else line.length
-                    withStyle(SpanStyle(color = palette.string)) {
-                        append(line.substring(index, tokenEnd))
-                    }
-                    index = tokenEnd
-                    if (end < 0) multiLineStringDelimiter = tripleDelimiter
-                    continue
-                }
-
-                val current = line[index]
-                if (current == '\"' || current == '\'' || current == '`') {
-                    var end = index + 1
-                    var escaped = false
-                    while (end < line.length) {
-                        val character = line[end]
-                        if (!escaped && character == current) {
-                            end++
-                            break
-                        }
-                        escaped = !escaped && character == '\\'
-                        if (character != '\\') escaped = false
-                        end++
-                    }
-                    val isProperty = line.substring(end).trimStart().startsWith(":")
-                    withStyle(SpanStyle(color = if (isProperty) palette.property else palette.string)) {
-                        append(line.substring(index, end))
-                    }
-                    index = end
-                    continue
-                }
-
-                if (current.isDigit()) {
-                    var end = index + 1
-                    while (end < line.length && (line[end].isLetterOrDigit() || line[end] in "._")) end++
-                    withStyle(SpanStyle(color = palette.number)) { append(line.substring(index, end)) }
-                    index = end
-                    continue
-                }
-
-                if (current.isLetter() || current == '_' || current == '$') {
-                    var end = index + 1
-                    while (end < line.length && (line[end].isLetterOrDigit() || line[end] == '_' || line[end] == '$')) end++
-                    val word = line.substring(index, end)
-                    val normalizedWord = word.lowercase()
-                    val nextNonWhitespace = line.drop(end).firstOrNull { !it.isWhitespace() }
-                    val previousNonWhitespace = line.take(index).lastOrNull { !it.isWhitespace() }
-                    val style = when {
-                        normalizedWord in codeKeywords -> SpanStyle(color = palette.keyword, fontWeight = FontWeight.SemiBold)
-                        normalizedWord in codeTypes || word.firstOrNull()?.isUpperCase() == true -> SpanStyle(color = palette.type)
-                        previousNonWhitespace == '@' -> SpanStyle(color = palette.annotation)
-                        nextNonWhitespace == '(' -> SpanStyle(color = palette.function)
-                        (language == "html" || language == "xml") &&
-                            (previousNonWhitespace == '<' || previousNonWhitespace == '/') -> SpanStyle(color = palette.function)
-                        else -> null
-                    }
-                    if (style != null) withStyle(style) { append(word) } else append(word)
-                    index = end
-                    continue
-                }
-
-                if (current in "=+-*/%<>!&|^~?:.@") {
-                    withStyle(SpanStyle(color = palette.operator)) { append(current) }
-                } else {
-                    append(current)
-                }
-                index++
             }
         }
+    } catch (error: Throwable) {
+        plain
     }
 }

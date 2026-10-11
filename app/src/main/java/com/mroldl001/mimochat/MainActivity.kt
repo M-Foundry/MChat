@@ -26,7 +26,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -140,6 +143,15 @@ private fun MainContent(
     val activity = LocalContext.current as? ComponentActivity
     val scope = rememberCoroutineScope()
 
+    LaunchedEffect(Unit) {
+        viewModel.preferencesManager.revision.drop(1).collect {
+            themeColor = viewModel.preferencesManager.getThemeColor()
+            themeMode = viewModel.preferencesManager.getThemeMode()
+            customThemeColorHex = viewModel.preferencesManager.getCustomThemeColorHex()
+            codeBlockColorMode = viewModel.preferencesManager.getCodeBlockColorMode()
+        }
+    }
+
     DisposableEffect(activity) {
         val apply = {
             if (Build.VERSION.SDK_INT >= 34 && activity != null) {
@@ -210,7 +222,10 @@ private fun MainContent(
                             customThemeColorHex = viewModel.preferencesManager.getCustomThemeColorHex()
                         }
                     },
-                    onCodeBlockColorModeChanged = { mode -> codeBlockColorMode = mode },
+                    onCodeBlockColorModeChanged = { mode ->
+                        codeBlockColorMode = mode
+                        viewModel.preferencesManager.saveCodeBlockColorMode(mode)
+                    },
                     onNavigateFromSearch = onNavigateFromSearch,
                     onNavigateFromDrawer = onNavigateFromDrawer,
                     onBackToChat = { onBackToChat = it }

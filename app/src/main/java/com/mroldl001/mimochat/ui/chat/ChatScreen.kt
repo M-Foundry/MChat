@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.mroldl001.mimochat.ui.chat.components.*
+import com.mroldl001.mimochat.ui.util.evictMediaMeta
 import com.mroldl001.mimochat.ui.chat.viewmodel.ChatViewModel
 import com.mroldl001.mimochat.data.api.*
 import com.mroldl001.mimochat.domain.model.MessageAttachment
@@ -152,6 +153,7 @@ fun ChatScreen(
             owned.removeAt(localIndex)
         }
         if (localIndex in current.indices) {
+            evictMediaMeta(current[localIndex].uri)
             current.removeAt(localIndex)
         }
         pendingAttachments.value = current
@@ -389,35 +391,8 @@ fun ChatScreen(
             },
             onNavigateToSearch = onNavigateToSearch,
             onNavigateToSettings = onNavigateToSettings,
-            onApiKeySaved = { key ->
-                viewModel.setApiKey(key)
-            },
-            onApiBaseUrlSaved = { url ->
-                viewModel.setApiBaseUrl(url)
-            },
-            onCustomPromptSaved = { prompt ->
-                viewModel.setCustomSystemPrompt(prompt)
-            },
             chatBackgroundUri = uiState.chatBackgroundUri,
             chatBackgroundOpacity = uiState.chatBackgroundOpacity,
-            onSelectBackgroundImage = pickBackgroundImage,
-            onBackgroundOpacityChanged = viewModel::setChatBackgroundOpacity,
-            onRestoreBackgroundDefault = clearBackgroundImage,
-            onTemperatureSaved = { temp ->
-                viewModel.setTemperature(temp)
-            },
-            onTopPSaved = { topP ->
-                viewModel.setTopP(topP)
-            },
-            onFrequencyPenaltySaved = { freqPenalty ->
-                viewModel.setFrequencyPenalty(freqPenalty)
-            },
-            onPresencePenaltySaved = { presPenalty ->
-                viewModel.setPresencePenalty(presPenalty)
-            },
-            onResetParameters = {
-                viewModel.resetParameters()
-            },
             onCheckForUpdate = viewModel::checkForUpdate,
             onAcceptPrereleaseUpdatesChanged = viewModel::setAcceptPrereleaseUpdates,
             onDownloadUpdate = viewModel::downloadUpdate,
@@ -479,12 +454,8 @@ fun ChatScreen(
         }
         return
     }
-
-    var settingsAnchorBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
-    val settingsPageTransition = rememberSettingsTransition()
     var showApiKeyWarningDialog by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-    
+
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var chatToDelete: com.mroldl001.mimochat.domain.model.Chat? by remember { mutableStateOf(null) }
 
@@ -683,7 +654,6 @@ fun ChatScreen(
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     ChatHistoryHeader(
-                        onSettingsBoundsChanged = { settingsAnchorBounds = it },
                         onSearchClick = onNavigateToSearch,
                         onSettingsClick = onNavigateToSettings,
                         onGitHubClick = {
@@ -692,11 +662,7 @@ fun ChatScreen(
                         }
                     )
 
-                    val filteredChats = uiState.chats.filter {
-                        it.title.contains(searchQuery, ignoreCase = true)
-                    }
-                    
-                    if (filteredChats.isEmpty()) {
+                    if (uiState.chats.isEmpty()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -718,7 +684,7 @@ fun ChatScreen(
                         val highlightedChatId = pendingSelectedChatId ?: uiState.currentChat?.id
                         val isAnimating = remember { mutableStateOf(false) }
                         val settledChatId = remember { mutableStateOf(highlightedChatId) }
-                        val historyEntries = remember(filteredChats) { buildChatHistoryEntries(filteredChats) }
+                        val historyEntries = rememberChatHistoryEntries(uiState.chats)
                         val selectedHistoryIndex = historyEntries.indexOfFirst {
                             it is ChatHistoryEntry.Item && it.chat.id == highlightedChatId
                         }
@@ -742,6 +708,7 @@ fun ChatScreen(
                                             isSelected = entry.chat.id == highlightedChatId,
                                             settledSelectedChatId = settledChatId.value,
                                             isAnimating = isAnimating.value,
+                                            contentOffsetDurationMillis = 360,
                                             onClick = {
                                                 pendingSelectJob?.cancel()
                                                 if (entry.chat.id == uiState.currentChat?.id) {
@@ -895,7 +862,7 @@ fun ChatScreen(
                     )
                 }
                 if (messages.isEmpty() && !isStreaming) {
-                    EmptyState(
+                    ChatEmptyState(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 } else {
@@ -996,14 +963,10 @@ fun ChatScreen(
     if (showApiKeyDialog) {
         ApiKeyDialog(
             currentKey = uiState.apiKey,
-            anchorBounds = settingsAnchorBounds,
-            transition = settingsPageTransition,
-            onDismiss = { settingsPageTransition.close { showApiKeyDialog = false } },
+            onDismiss = { showApiKeyDialog = false },
             onConfirm = {
-                settingsPageTransition.close {
-                    viewModel.setApiKey(it)
-                    showApiKeyDialog = false
-                }
+                viewModel.setApiKey(it)
+                showApiKeyDialog = false
             }
         )
     }
@@ -1011,14 +974,10 @@ fun ChatScreen(
     if (showApiBaseUrlDialog) {
         ApiBaseUrlDialog(
             currentUrl = uiState.apiBaseUrl,
-            anchorBounds = settingsAnchorBounds,
-            transition = settingsPageTransition,
-            onDismiss = { settingsPageTransition.close { showApiBaseUrlDialog = false } },
+            onDismiss = { showApiBaseUrlDialog = false },
             onConfirm = {
-                settingsPageTransition.close {
-                    viewModel.setApiBaseUrl(it)
-                    showApiBaseUrlDialog = false
-                }
+                viewModel.setApiBaseUrl(it)
+                showApiBaseUrlDialog = false
             }
         )
     }
@@ -1026,14 +985,10 @@ fun ChatScreen(
     if (showCustomPromptDialog) {
         CustomSystemPromptDialog(
             currentPrompt = uiState.customSystemPrompt,
-            anchorBounds = settingsAnchorBounds,
-            transition = settingsPageTransition,
-            onDismiss = { settingsPageTransition.close { showCustomPromptDialog = false } },
+            onDismiss = { showCustomPromptDialog = false },
             onConfirm = {
-                settingsPageTransition.close {
-                    viewModel.setCustomSystemPrompt(it)
-                    showCustomPromptDialog = false
-                }
+                viewModel.setCustomSystemPrompt(it)
+                showCustomPromptDialog = false
             }
         )
     }
@@ -1066,9 +1021,7 @@ fun ChatScreen(
             onSelectImage = pickBackgroundImage,
             onOpacityChanged = viewModel::setChatBackgroundOpacity,
             onRestoreDefault = clearBackgroundImage,
-            anchorBounds = settingsAnchorBounds,
-            transition = settingsPageTransition,
-            onDismiss = { settingsPageTransition.close { showBackgroundSettingsDialog = false } }
+            onDismiss = { showBackgroundSettingsDialog = false }
         )
     }
 
@@ -1092,23 +1045,17 @@ fun ChatScreen(
             initialTopP = uiState.topP,
             initialFrequencyPenalty = uiState.frequencyPenalty,
             initialPresencePenalty = uiState.presencePenalty,
-            anchorBounds = settingsAnchorBounds,
-            transition = settingsPageTransition,
-            onDismiss = { settingsPageTransition.close { showParameterSettingsDialog = false } },
+            onDismiss = { showParameterSettingsDialog = false },
             onConfirm = { temp, topP, freqPenalty, presPenalty ->
-                settingsPageTransition.close {
-                    viewModel.setTemperature(temp)
-                    viewModel.setTopP(topP)
-                    viewModel.setFrequencyPenalty(freqPenalty)
-                    viewModel.setPresencePenalty(presPenalty)
-                    showParameterSettingsDialog = false
-                }
+                viewModel.setTemperature(temp)
+                viewModel.setTopP(topP)
+                viewModel.setFrequencyPenalty(freqPenalty)
+                viewModel.setPresencePenalty(presPenalty)
+                showParameterSettingsDialog = false
             },
             onReset = {
-                settingsPageTransition.close {
-                    viewModel.resetParameters()
-                    showParameterSettingsDialog = false
-                }
+                viewModel.resetParameters()
+                showParameterSettingsDialog = false
             }
         )
     }
@@ -1147,122 +1094,6 @@ fun ChatScreen(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
             textContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun ChatListItem(
-    chat: com.mroldl001.mimochat.domain.model.Chat,
-    isSelected: Boolean,
-    settledSelectedChatId: Long?,
-    isAnimating: Boolean = false,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val contentOffset by animateDpAsState(
-        targetValue = if (isSelected) 8.dp else 0.dp,
-        animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
-        label = "chatItemContentOffset"
-    )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp)
-            .background(
-                color = MaterialTheme.colorScheme.primary.copy(
-                    alpha = if (chat.id == settledSelectedChatId && !isAnimating) 0.14f else 0f
-                ),
-                shape = RoundedCornerShape(20.dp)
-            )
-            .height(72.dp)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-            .padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .graphicsLayer { translationX = contentOffset.toPx() }
-        ) {
-            Text(
-                text = chat.title,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = formatTimestamp(chat.updatedAt),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-            )
-        }
-        IconButton(onClick = onDelete) {
-            Icon(
-                imageVector = Icons.Default.Delete,
-                contentDescription = stringResource(R.string.delete),
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-}
-
-private fun formatTimestamp(timestamp: Long): String {
-    val sdf = java.text.SimpleDateFormat("yyyy/MM/dd", java.util.Locale.getDefault())
-    return sdf.format(java.util.Date(timestamp))
-}
-
-@Composable
-private fun EmptyState(modifier: Modifier = Modifier) {
-    val egg = "MChat在这里，シタイだけ探した冒険TONGUE"
-    val tips = listOf(
-        stringResource(R.string.welcome_tip_1),
-        stringResource(R.string.welcome_tip_2),
-        stringResource(R.string.welcome_tip_3),
-        stringResource(R.string.welcome_tip_4),
-        egg
-    )
-
-    val randomText = remember {
-        tips.random()
-    }
-
-    val prefix = stringResource(R.string.welcome_prefix)
-    val firstLine: String
-    val secondLine: String
-    if (randomText == egg) {
-        firstLine = prefix
-        secondLine = "シタイだけ探した冒険TONGUE"
-    } else {
-        firstLine = prefix
-        secondLine = randomText
-    }
-    
-    Column(
-        modifier = modifier.padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = firstLine,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-        )
-        Text(
-            text = secondLine,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
     }
 }

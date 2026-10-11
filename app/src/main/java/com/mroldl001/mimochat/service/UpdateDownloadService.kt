@@ -35,6 +35,7 @@ class UpdateDownloadService : Service() {
         const val EXTRA_VERSION_NAME = "version_name"
         private const val CHANNEL_ID = "app_update_download"
         private const val NOTIFICATION_ID = 2001
+        private val UNSAFE_FILENAME_CHARS = Regex("[^A-Za-z0-9._-]")
     }
 
     private val serviceJob = SupervisorJob()
@@ -74,7 +75,7 @@ class UpdateDownloadService : Service() {
 
     private fun downloadAndInstall(downloadUrl: String, version: String) {
         val updateDir = File(filesDir, "updates").apply { mkdirs() }
-        val safeVersion = version.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val safeVersion = version.replace(UNSAFE_FILENAME_CHARS, "_")
         val apkFile = File(updateDir, "MChat-$safeVersion.apk")
         var downloadCompleted = false
         try {

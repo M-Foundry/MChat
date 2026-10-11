@@ -29,12 +29,10 @@ import com.mroldl001.mimochat.data.api.*
 @Composable
 internal fun ApiKeyDialog(
     currentKey: String,
-    anchorBounds: androidx.compose.ui.geometry.Rect,
-    transition: SettingsTransition,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
-    var apiKey by remember { mutableStateOf(currentKey) }
+    var apiKey by remember(currentKey) { mutableStateOf(currentKey) }
 
     AlertDialog(
         modifier = Modifier.settingsDialogWidth(),
@@ -86,12 +84,10 @@ internal fun ApiKeyDialog(
 @Composable
 internal fun CustomSystemPromptDialog(
     currentPrompt: String,
-    anchorBounds: androidx.compose.ui.geometry.Rect,
-    transition: SettingsTransition,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
-    var customPrompt by remember { mutableStateOf(currentPrompt) }
+    var customPrompt by remember(currentPrompt) { mutableStateOf(currentPrompt) }
 
     AlertDialog(
         modifier = Modifier.settingsDialogWidth(),
@@ -144,8 +140,6 @@ internal fun ParameterSettingsDialog(
     initialTopP: Float,
     initialFrequencyPenalty: Float,
     initialPresencePenalty: Float,
-    anchorBounds: androidx.compose.ui.geometry.Rect,
-    transition: SettingsTransition,
     onDismiss: () -> Unit,
     onConfirm: (Float, Float, Float, Float) -> Unit,
     onReset: () -> Unit
@@ -523,9 +517,9 @@ internal fun ParameterSettingsDialog(
                             )
                         }
                     }
-                    if (presencePenaltyError) {
-                        Text(
-                            text = stringResource(R.string.param_freq_hint),
+if (presencePenaltyError) {
+ Text(
+       text = stringResource(R.string.param_rep_hint),
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall
                         )
