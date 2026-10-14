@@ -5,7 +5,7 @@
 </div>
 
 > [!TIP]
-> Translated by LLM; may contain inaccuracies.
+> Translated by LLM, may contain inaccuracies.
 
 MChat - An AI chat client optimized for the MiMo large model, built for a native Android experience
 
@@ -19,7 +19,7 @@ MChat - An AI chat client optimized for the MiMo large model, built for a native
 ---
 
 > [!NOTE]
-> 
+>
 > A native Android AI chat client built with Kotlin and Jetpack Compose, featuring multi-model conversations, multimodal input, web search, thinking mode, and Markdown, LaTeX, and code syntax highlighting
 
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat-square\&logo=kotlin\&logoColor=white)
@@ -58,11 +58,11 @@ MChat - An AI chat client optimized for the MiMo large model, built for a native
 #### Option 2: Build from Source
 
 > [!WARNING]
-> 
+>
 > Building from source is not recommended for regular users — it's more trouble than it's worth, and when building the `.apk`:
-> 
+>
 > A `debug` build produces a larger package and, because of the debug tag, cannot be installed through the system installer
-> 
+>
 > A `releases` build requires the developer's signing key, which is kept private for security reasons; if you sign it yourself, every update must be rebuilt with the same key, so you won't be able to update directly over the developer's released `.apk`
 
 1. Clone the repo locally with `git clone`
@@ -87,29 +87,29 @@ MChat - An AI chat client optimized for the MiMo large model, built for a native
 
 ## 📚 Language Support
 
-| Language | Status |
-| --- | --- |
-| 简体中文 (Simplified Chinese) | Supported |
+| Language                       | Status        |
+| ------------------------------ | ------------- |
+| 简体中文 (Simplified Chinese)  | Supported     |
 | 繁體中文 (Traditional Chinese) | AI translated |
-| English | AI translated |
-| 日本語 (Japanese) | AI translated |
+| English                        | AI translated |
+| 日本語 (Japanese)              | AI translated |
 
 ## 🎨 Themes
 
 The app supports several theme colors:
 
-| Theme | Light Mode | Dark Mode |
-| --- | --- | --- |
-| Ink & Paper (Default) | `#000000` | `#FFFFFF` |
-| Dynamic Color | System extracted | System extracted |
-| Custom Color | Custom | Custom |
-| Hatsune Resonance | `#39C5BB` | `#39C5BB` |
-| Yoshiwara Lament | `#D93A49` | `#D93A49` |
-| Miyou Glimmer | `#FF7E00` | `#E86F00` |
-| Silent Jade Whisper | `#5EA0AA` | `#8FCED0` |
-| Verdant Shade | `#006E2A` | `#5CDB78` |
-| Eternal Reverie | `#6650A4` | `#D0BCFF` |
-| Abyssal Blue | `#0B57D0` | `#A8C7FA` |
+| Theme                 | Light Mode       | Dark Mode        |
+| --------------------- | ---------------- | ---------------- |
+| Ink & Paper (Default) | `#000000`        | `#FFFFFF`        |
+| Dynamic Color         | System extracted | System extracted |
+| Custom Color          | Custom           | Custom           |
+| Hatsune Resonance     | `#39C5BB`        | `#39C5BB`        |
+| Yoshiwara Lament      | `#D93A49`        | `#D93A49`        |
+| Miyou Glimmer         | `#FF7E00`        | `#E86F00`        |
+| Silent Jade Whisper   | `#5EA0AA`        | `#8FCED0`        |
+| Verdant Shade         | `#006E2A`        | `#5CDB78`        |
+| Eternal Reverie       | `#6650A4`        | `#D0BCFF`        |
+| Abyssal Blue          | `#0B57D0`        | `#A8C7FA`        |
 
 ## 📖 Usage
 
