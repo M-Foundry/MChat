@@ -272,13 +272,13 @@
   <string name="notif_update_signature_mismatch">署名検証に失敗したため、インストールを中止しました</string>
 
   <!-- 免責事項 -->
-  <string name="disclaimer_section_non_official">非公式声明</string>
+  <string name="disclaimer_section_non_official">非公式の声明</string>
   <string name="disclaimer_section_ip">知的財産権</string>
   <string name="disclaimer_section_privacy">プライバシー保護</string>
   <string name="disclaimer_section_risk">リスク負担</string>
   <string name="disclaimer_section_feedback">フィードバックとサポート</string>
   <string name="disclaimer_non_official_lead">本アプリ（MChat）はサードパーティが開発したオープンソースクライアントであり、</string>
-  <string name="disclaimer_non_official_emphasis">小米公司（Xiaomi Corporation）およびその関連会社（以下「小米」という）とは、いかなる所属・授权・提携関係もありません</string>
+  <string name="disclaimer_non_official_emphasis">小米公司（Xiaomi Corporation）およびその関連会社（以下「小米」という）とは、いかなる所属・認可・提携関係もありません</string>
   <string name="disclaimer_non_official_tail">。</string>
   <string name="disclaimer_ip_lead">&quot;小米&quot;、&quot;Xiaomi&quot;、&quot;MiMo&quot; などの商標およびロゴは小米公司に帰属します。本アプリは機能互換性を示す目的のみでこれらの標識を使用しています（</string>
   <string name="disclaimer_ip_emphasis">すなわち指定使用の公正利用</string>

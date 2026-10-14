@@ -6,6 +6,8 @@
 
 MChat - 一款为 MiMo 大模型优化，专注于原生 Android 体验的 AI 聊天客户端
 
+**语言：** 简体中文 | [繁體中文](README.zh-TW.md) | [English](README.en.md) | [日本語](README.ja.md)
+
 ![GitHub stars](https://img.shields.io/github/stars/MRoldL001/MChat?style=for-the-badge&label=Stars)
 ![GitHub Release Downloads](https://img.shields.io/github/downloads/MRoldL001/MChat/total?style=for-the-badge&label=Downloads)
 ![MiMo](https://img.shields.io/badge/MiMo-console-FF7E00?style=for-the-badge\&logo=xiaomi\&logoColor=white)
@@ -14,9 +16,9 @@ MChat - 一款为 MiMo 大模型优化，专注于原生 Android 体验的 AI �
 ---
 
 > [!NOTE]
-> 
+>
 > A native Android AI chat client built with Kotlin and Jetpack Compose, featuring multi-model conversations, multimodal input, web search, thinking mode, and Markdown, LaTeX, and code syntax highlighting
-> 
+>
 > 基于 Kotlin 与 Jetpack Compose 开发的原生 Android Al 聊天客户端，支持多模型对话、多模态输入、联网搜索、思考模式及 Markdown/LaTeX/代码高亮
 
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat-square\&logo=kotlin\&logoColor=white)
@@ -55,11 +57,11 @@ MChat - 一款为 MiMo 大模型优化，专注于原生 Android 体验的 AI �
 #### 方式二：从源码构建
 
 > [!WARNING]
-> 
+>
 > 对于普通用户，不推荐自行从源码构建，因为其更为繁琐，且构建 `.apk` 时：
-> 
+>
 > 如果构建 `debug` 包，则安装包体积会更大，且因为有调试标签，无法通过系统安装器安装
-> 
+>
 > 如果构建 `releases` 包，为了安全性开发者所持签名密钥不会被公开，在自行签名的情况下每次更新需要用同一组密钥重新构建安装包，无法直接更新开发者所发布的 `.apk` 安装包
 
 1. 使用 `git clone` 将 Repo 克隆到本地
@@ -84,29 +86,29 @@ MChat - 一款为 MiMo 大模型优化，专注于原生 Android 体验的 AI �
 
 ## 📚 多语言支持情况
 
-| 语言      | 支持情况          |
-| ------- | ------------- |
-| 简体中文    | 支持            |
-| 繁體中文    | AI 翻譯         |
-| English | AI translated |
-| 日本語     | AI 翻訳         |
+| 语言     | 支持情况      |
+| -------- | ------------- |
+| 简体中文 | 支持          |
+| 繁體中文（繁体中文） | AI 翻译       |
+| English（英语） | AI 翻译       |
+| 日本語（日语） | AI 翻译       |
 
 ## 🎨 主题
 
 应用支持多种主题颜色：
 
-| 主题       | 亮色模式      | 暗色模式      |
-| -------- | --------- | --------- |
-| 墨白素笺(默认) | `#000000` | `#FFFFFF` |
-| 动态取色     | 系统动态提取    | 系统动态提取    |
-| 自定义色彩    | 自定义       | 自定义       |
-| 初音之籁     | `#39C5BB` | `#39C5BB` |
-| 吉原哀歌     | `#D93A49` | `#D93A49` |
-| 米柚微光     | `#FF7E00` | `#E86F00` |
-| 寂静碧语     | `5EA0AA`  | `8FCED0`  |
-| 森盎青影     | `#006E2A` | `#5CDB78` |
-| 永恒幽梦     | `#6650A4` | `#D0BCFF` |
-| 深海沉蓝     | `#0B57D0` | `#A8C7FA` |
+| 主题           | 亮色模式     | 暗色模式     |
+| -------------- | ------------ | ------------ |
+| 墨白素笺(默认) | `#000000`    | `#FFFFFF`    |
+| 动态取色       | 系统动态提取 | 系统动态提取 |
+| 自定义色彩     | 自定义       | 自定义       |
+| 初音之籁       | `#39C5BB`    | `#39C5BB`    |
+| 吉原哀歌       | `#D93A49`    | `#D93A49`    |
+| 米柚微光       | `#FF7E00`    | `#E86F00`    |
+| 寂静碧语       | `#5EA0AA`    | `#8FCED0`    |
+| 森盎青影       | `#006E2A`    | `#5CDB78`    |
+| 永恒幽梦       | `#6650A4`    | `#D0BCFF`    |
+| 深海沉蓝       | `#0B57D0`    | `#A8C7FA`    |
 
 ## 📖 使用说明
 
@@ -182,11 +184,11 @@ MChat - 一款为 MiMo 大模型优化，专注于原生 Android 体验的 AI �
 
 ### 非官方声明
 
-本应用（MChat）为第三方开发的开源客户端，**与小米公司（Xiaomi Corporation）及其关联公司(下称小米公司)无任何隶属、授权或合作关系**。
+本应用（MChat）为第三方开发的开源客户端，**与小米公司（Xiaomi Corporation）及其关联公司（下称小米公司）无任何隶属、授权或合作关系**。
 
 ### 知识产权
 
-“小米”、“Xiaomi”、“MiMo” 等商标及图形标识归小米公司所有。本应用使用上述标识仅用于描述功能兼容性（即指示性合理使用**）。
+"小米"、"Xiaomi"、"MiMo" 等商标及图形标识归小米公司所有。本应用使用上述标识仅用于描述功能兼容性（即指示性合理使用）。
 
 ### 隐私保护
 
