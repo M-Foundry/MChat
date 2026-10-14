@@ -1,5 +1,6 @@
 package com.mroldl001.mimochat.ui.chat.components
 
+import android.annotation.SuppressLint
 import com.mroldl001.mimochat.R
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -28,8 +29,6 @@ import androidx.compose.runtime.*
 import com.mroldl001.mimochat.ui.theme.LocalCodeBlockDark
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -43,9 +42,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
@@ -58,16 +54,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.CancellationException
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
 import dev.textmate.theme.FontStyle as TextMateFontStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -75,12 +67,91 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.pow
 import kotlin.math.roundToInt
+
+internal data class CodeFullscreenRequest(
+    val highlightedLines: List<AnnotatedString>,
+    val maxLineNumberWidth: Int,
+    val palette: CodeBlockPalette,
+    val fenceLabel: String,
+    val normalizedLanguage: String,
+    val rawCode: String,
+    val originBounds: CodeBlockBounds?
+)
+
+internal interface CodeFullscreenOverlayHost {
+    fun show(request: CodeFullscreenRequest)
+    fun dismiss()
+}
+
+internal val LocalCodeFullscreenOverlayHost =
+    staticCompositionLocalOf<CodeFullscreenOverlayHost?> { null }
+
+@Composable
+fun CodeFullscreenOverlayProvider(content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    var request by remember { mutableStateOf<CodeFullscreenRequest?>(null) }
+    val progress = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+
+    val host = remember {
+        object : CodeFullscreenOverlayHost {
+            override fun show(r: CodeFullscreenRequest) {
+                request = r
+                scope.launch {
+                    progress.animateTo(
+                        1f,
+                        spring(dampingRatio = 0.86f, stiffness = 380f)
+                    )
+                }
+            }
+
+            override fun dismiss() {
+                scope.launch {
+                    progress.animateTo(
+                        0f,
+                        spring(dampingRatio = 0.9f, stiffness = 460f)
+                    )
+                    request = null
+                }
+            }
+        }
+    }
+
+    CompositionLocalProvider(LocalCodeFullscreenOverlayHost provides host) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            content()
+            request?.let { req ->
+                CodeFullscreenOverlay(
+                    highlightedLines = req.highlightedLines,
+                    maxLineNumberWidth = req.maxLineNumberWidth,
+                    palette = req.palette,
+                    fenceLabel = req.fenceLabel,
+                    normalizedLanguage = req.normalizedLanguage,
+                    rawCode = req.rawCode,
+                    animatedProgress = progress.value,
+                    originBounds = req.originBounds,
+                    onDismiss = { host.dismiss() },
+                    onCopy = {
+                        val clipboard =
+                            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("code", it))
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.toast_code_copied),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                )
+            }
+        }
+    }
+}
 
 @Composable
 internal fun CodeBlockView(code: String, info: String?) {
     val context = LocalContext.current
-    val activityRootView = LocalView.current.rootView
     val darkCodeBlock = LocalCodeBlockDark.current
     val palette = codeBlockPalette(darkCodeBlock)
     val lines = code.replace("\r\n", "\n").replace('\r', '\n').split("\n")
@@ -88,34 +159,8 @@ internal fun CodeBlockView(code: String, info: String?) {
     val normalizedLanguage = normalizeCodeLanguage(fenceLabel)
     val language = normalizedLanguage.takeIf { hasGrammar(context, it) }
     val codeLines = lines
-    var fullscreen by remember { mutableStateOf(false) }
-    var overlayMounted by remember { mutableStateOf(false) }
-    val fullscreenProgress = remember { Animatable(0f) }
     var originBounds by remember { mutableStateOf<CodeBlockBounds?>(null) }
-    var activityWindowOrigin by remember { mutableStateOf(Offset.Zero) }
     var blockCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-
-    LaunchedEffect(fullscreen) {
-        if (fullscreen) {
-            overlayMounted = true
-            fullscreenProgress.animateTo(
-                1f,
-                spring(
-                    dampingRatio = 0.86f,
-                    stiffness = 380f
-                )
-            )
-        } else {
-            fullscreenProgress.animateTo(
-                0f,
-                spring(
-                    dampingRatio = 0.9f,
-                    stiffness = 460f
-                )
-            )
-            overlayMounted = false
-        }
-    }
 
     val lineCount = codeLines.size
     val maxLineNumberWidth = lineCount.toString().length
@@ -135,6 +180,8 @@ internal fun CodeBlockView(code: String, info: String?) {
             }
         }
     }
+
+    val host = LocalCodeFullscreenOverlayHost.current
 
     Column(
         modifier = Modifier
@@ -195,9 +242,6 @@ internal fun CodeBlockView(code: String, info: String?) {
 
             IconButton(
                 onClick = {
-                    val loc = IntArray(2)
-                    activityRootView?.getLocationOnScreen(loc)
-                    activityWindowOrigin = Offset(loc[0].toFloat(), loc[1].toFloat())
                     val bounds = blockCoordinates?.boundsInWindow()
                     originBounds = bounds?.let {
                         CodeBlockBounds(
@@ -207,7 +251,17 @@ internal fun CodeBlockView(code: String, info: String?) {
                             bottom = it.bottom.roundToInt()
                         )
                     }
-                    fullscreen = true
+                    host?.show(
+                        CodeFullscreenRequest(
+                            highlightedLines = highlightedLines,
+                            maxLineNumberWidth = maxLineNumberWidth,
+                            palette = palette,
+                            fenceLabel = fenceLabel,
+                            normalizedLanguage = normalizedLanguage,
+                            rawCode = code,
+                            originBounds = originBounds
+                        )
+                    )
                 },
                 modifier = Modifier.size(CODE_TOOLBAR_BUTTON)
             ) {
@@ -219,57 +273,27 @@ internal fun CodeBlockView(code: String, info: String?) {
                 )
             }
         }
-        
-Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .padding(bottom = 12.dp)
-    ) {
-        CodeBody(
-            highlightedLines = highlightedLines,
-            maxLineNumberWidth = maxLineNumberWidth,
-            textColor = palette.text,
-            numberColor = palette.muted,
-            horizontalState = codeHScroll,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
 
-    if (overlayMounted) {
-        Dialog(
-            onDismissRequest = { fullscreen = false },
-            properties = DialogProperties(
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false,
-                usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = false
-            )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp)
         ) {
-            CodeFullscreenOverlay(
+            CodeBody(
                 highlightedLines = highlightedLines,
                 maxLineNumberWidth = maxLineNumberWidth,
-                palette = palette,
-                fenceLabel = fenceLabel,
-                normalizedLanguage = normalizedLanguage,
-                rawCode = code,
-                animatedProgress = fullscreenProgress.value,
-                originBounds = originBounds,
-                activityWindowOrigin = activityWindowOrigin,
-                onDismiss = { fullscreen = false },
-                onCopy = {
-                    val clipboard =
-                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("code", it))
-                    Toast.makeText(context, context.getString(R.string.toast_code_copied), Toast.LENGTH_SHORT).show()
-                }
+                textColor = palette.text,
+                numberColor = palette.muted,
+                horizontalState = codeHScroll,
+                modifier = Modifier.weight(1f)
             )
         }
     }
 }
 
 @Composable
+@SuppressLint("UnusedBoxWithConstraintsScope")
 private fun CodeFullscreenOverlay(
     highlightedLines: List<AnnotatedString>,
     maxLineNumberWidth: Int,
@@ -279,7 +303,6 @@ private fun CodeFullscreenOverlay(
     rawCode: String,
     animatedProgress: Float,
     originBounds: CodeBlockBounds?,
-    activityWindowOrigin: Offset,
     onDismiss: () -> Unit,
     onCopy: (String) -> Unit
 ) {
@@ -288,7 +311,9 @@ private fun CodeFullscreenOverlay(
     val hBarVisible by rememberScrollbarVisibility(hScroll)
     val vBarVisible by rememberScrollbarVisibility(vScroll)
     val anyActive by rememberScrollActivity(vScroll, hScroll)
-    val bg = Color(0xFF0D0D0D)
+    val bg = palette.background
+    val isDark = bg.isDark()
+    val scrollbarThumb = if (isDark) Color.White.copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.4f)
 
     var predictiveBackProgress by remember { mutableFloatStateOf(0f) }
     val backScale by remember { derivedStateOf { 1f - predictiveBackProgress * 0.08f } }
@@ -308,79 +333,24 @@ private fun CodeFullscreenOverlay(
 
     BackHandler(onBack = onDismiss)
 
-    val view = LocalView.current
-    val dialogWindow = remember(view) { (view as? DialogWindowProvider)?.window }
-    val overlayRootView = view.rootView
-
-    DisposableEffect(Unit) {
-        dialogWindow?.setBackgroundDrawable(
-            android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
-        )
-        dialogWindow?.setDimAmount(0f)
-        onDispose { }
-    }
-
-    DisposableEffect(dialogWindow) {
-        val target = dialogWindow
-        if (target != null) {
-            runCatching {
-                // targetSdk 35+ 起 statusBarColor 对已 edge-to-edge 的窗口失效，
-                // 必须让 Dialog 自己画到状态栏背后，否则状态栏仍是透明/原色
-                WindowCompat.setDecorFitsSystemWindows(target, false)
-                @Suppress("DEPRECATION")
-                run {
-                    target.statusBarColor = bg.toArgb()
-                    target.navigationBarColor = bg.toArgb()
-                }
-                WindowCompat.getInsetsController(target, target.decorView).apply {
-                    isAppearanceLightStatusBars = false
-                    isAppearanceLightNavigationBars = false
-                }
-            }
-        }
-        onDispose {
-            if (target != null) {
-                runCatching {
-                    @Suppress("DEPRECATION")
-                    run {
-                        target.statusBarColor = android.graphics.Color.TRANSPARENT
-                        target.navigationBarColor = android.graphics.Color.TRANSPARENT
-                    }
-                }
-            }
-        }
-    }
-
-    val overlayWindowOrigin = remember { mutableStateOf(Offset.Zero) }
     BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .onGloballyPositioned {
-                // rootView 就是 Dialog 自己的 DecorView，直接取它在屏幕上的位置；
-                // 不能经 findActivity() —— Dialog 的 context 不是 Activity，会拿到 null
-                val loc = IntArray(2)
-                overlayRootView?.getLocationOnScreen(loc)
-                overlayWindowOrigin.value = Offset(loc[0].toFloat(), loc[1].toFloat())
-            }
+        modifier = Modifier.fillMaxSize()
     ) {
         val density = LocalDensity.current
-        val overlayWidthPx = with(density) { maxWidth.toPx() }
-        val overlayHeightPx = with(density) { maxHeight.toPx() }
+        val overlayMaxWidth = maxWidth
+        val overlayMaxHeight = maxHeight
+        val overlayWidthPx = with(density) { overlayMaxWidth.toPx() }
+        val overlayHeightPx = with(density) { overlayMaxHeight.toPx() }
 
-        // originBounds 是 Activity window 内的坐标，overlay 在 Dialog window 内，
-        // 两者原点不同，必须各自换算到屏幕坐标再相减，否则动画起点会纵向偏移
         val origin = originBounds
-        val overlayOrigin = overlayWindowOrigin.value
-        val containerGeometry = remember(origin, overlayOrigin, overlayWidthPx, overlayHeightPx) {
+        val containerGeometry = remember(origin, overlayWidthPx, overlayHeightPx) {
             if (origin == null || origin.width() <= 0 || origin.height() <= 0 ||
                 overlayWidthPx <= 0f || overlayHeightPx <= 0f
             ) {
                 FULLSCREEN_GEOMETRY
             } else {
-                val originScreenLeft = origin.left + activityWindowOrigin.x
-                val originScreenTop = origin.top + activityWindowOrigin.y
-                val originCenterX = originScreenLeft - overlayOrigin.x + origin.width() / 2f
-                val originCenterY = originScreenTop - overlayOrigin.y + origin.height() / 2f
+                val originCenterX = origin.left + origin.width() / 2f
+                val originCenterY = origin.top + origin.height() / 2f
                 ContainerGeometry(
                     offsetX = originCenterX - overlayWidthPx / 2f,
                     offsetY = originCenterY - overlayHeightPx / 2f,
@@ -424,7 +394,7 @@ private fun CodeFullscreenOverlay(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = Color(0xFF9AA0A6),
+                        tint = palette.muted,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -432,7 +402,7 @@ private fun CodeFullscreenOverlay(
                 Text(
                     text = fenceLabel.ifEmpty { stringResource(R.string.code_block) },
                     style = TextStyle(
-                        color = Color(0xFF9AA0A6),
+                        color = palette.muted,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     ),
@@ -444,7 +414,7 @@ private fun CodeFullscreenOverlay(
                     Icon(
                         imageVector = Icons.Default.ContentCopy,
                         contentDescription = stringResource(R.string.copy_code),
-                        tint = Color(0xFF9AA0A6),
+                        tint = palette.muted,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -452,7 +422,7 @@ private fun CodeFullscreenOverlay(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = stringResource(R.string.close_fullscreen),
-                        tint = Color(0xFF9AA0A6),
+                        tint = palette.muted,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -474,8 +444,8 @@ private fun CodeFullscreenOverlay(
                     CodeBody(
                         highlightedLines = highlightedLines,
                         maxLineNumberWidth = maxLineNumberWidth,
-                        textColor = Color.White,
-                        numberColor = Color(0xFF5F6368),
+                        textColor = palette.text,
+                        numberColor = palette.muted,
                         horizontalState = hScroll,
                         showHorizontalBar = false,
                         fillHeight = true,
@@ -490,7 +460,8 @@ private fun CodeFullscreenOverlay(
                     visible = anyActive && vBarVisible,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .padding(horizontal = SCROLLBAR_GAP)
+                        .padding(horizontal = SCROLLBAR_GAP),
+                    thumbColor = scrollbarThumb
                 )
 
                 CodeHorizontalScrollbar(
@@ -498,7 +469,8 @@ private fun CodeFullscreenOverlay(
                     visible = anyActive && hBarVisible,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(top = SCROLLBAR_GAP)
+                        .padding(top = SCROLLBAR_GAP),
+                    thumbColor = scrollbarThumb
                 )
             }
         }
@@ -521,6 +493,11 @@ private fun CodeBody(
     val hBarActive by rememberScrollActivity(horizontalState)
     val numberStyle = codeLineStyle(numberColor)
     val textStyle = codeLineStyle(textColor)
+    val scrollbarThumb = if (!textColor.isDark()) {
+        Color.White.copy(alpha = 0.4f)
+    } else {
+        Color.Black.copy(alpha = 0.4f)
+    }
 
     Box(modifier) {
         Column(
@@ -564,7 +541,8 @@ private fun CodeBody(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(horizontal = 2.dp)
-                    .padding(top = SCROLLBAR_GAP)
+                    .padding(top = SCROLLBAR_GAP),
+                thumbColor = scrollbarThumb
             )
         }
     }
@@ -573,15 +551,6 @@ private fun CodeBody(
 private fun numberColumnWidth(digits: Int): Dp =
     (CODE_FONT_SIZE.value * 0.62f * digits).dp + CODE_GUTTER
 
-private fun android.view.View.findActivity(): android.app.Activity? {
-    var current = context
-    while (current is android.content.ContextWrapper) {
-        if (current is android.app.Activity) return current
-        current = current.baseContext
-    }
-    return null
-}
-
 private fun codeLineStyle(color: Color) = TextStyle(
     color = color,
     fontSize = CODE_FONT_SIZE,
@@ -589,11 +558,20 @@ private fun codeLineStyle(color: Color) = TextStyle(
     fontFamily = FontFamily.Monospace
 )
 
+private fun Color.isDark(): Boolean {
+    val r = if (red <= 0.04045f) red / 12.92f else ((red + 0.055f) / 1.055f).pow(2.4f)
+    val g = if (green <= 0.04045f) green / 12.92f else ((green + 0.055f) / 1.055f).pow(2.4f)
+    val b = if (blue <= 0.04045f) blue / 12.92f else ((blue + 0.055f) / 1.055f).pow(2.4f)
+    return (0.2126f * r + 0.7152f * g + 0.0722f * b) < 0.5f
+}
+
 @Composable
+@SuppressLint("UnusedBoxWithConstraintsScope")
 private fun CodeHorizontalScrollbar(
     state: ScrollState,
     visible: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    thumbColor: Color = SCROLLBAR_THUMB
 ) {
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
@@ -606,7 +584,8 @@ private fun CodeHorizontalScrollbar(
             .height(SCROLLBAR_TRACK_HEIGHT)
     ) {
         val density = LocalDensity.current
-        val viewportPx = with(density) { maxWidth.toPx() }
+        val viewportDp = maxWidth
+        val viewportPx = with(density) { viewportDp.toPx() }
         val contentPx = viewportPx + state.maxValue
         if (contentPx > 0f && viewportPx > 0f) {
             val thumbWidth = viewportPx * (viewportPx / contentPx).coerceAtLeast(SCROLLBAR_MIN_FRACTION)
@@ -622,17 +601,19 @@ private fun CodeHorizontalScrollbar(
                     }
                     .fillMaxHeight()
                     .fillMaxWidth()
-                    .background(color = SCROLLBAR_THUMB, shape = RoundedCornerShape(50))
+                    .background(color = thumbColor, shape = RoundedCornerShape(50))
             )
         }
     }
 }
 
 @Composable
+@SuppressLint("UnusedBoxWithConstraintsScope")
 private fun CodeVerticalScrollbar(
     state: ScrollState,
     visible: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    thumbColor: Color = SCROLLBAR_THUMB
 ) {
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
@@ -641,7 +622,8 @@ private fun CodeVerticalScrollbar(
     )
     BoxWithConstraints(modifier.fillMaxHeight().width(SCROLLBAR_TRACK_WIDTH)) {
         val density = LocalDensity.current
-        val viewportPx = with(density) { maxHeight.toPx() }
+        val viewportDp = maxHeight
+        val viewportPx = with(density) { viewportDp.toPx() }
         val contentPx = viewportPx + state.maxValue
         if (contentPx > 0f && viewportPx > 0f) {
             val thumbHeight = viewportPx * (viewportPx / contentPx).coerceAtLeast(SCROLLBAR_MIN_FRACTION)
@@ -657,7 +639,7 @@ private fun CodeVerticalScrollbar(
                     }
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .background(color = SCROLLBAR_THUMB, shape = RoundedCornerShape(50))
+                    .background(color = thumbColor, shape = RoundedCornerShape(50))
             )
         }
     }

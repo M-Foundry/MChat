@@ -43,6 +43,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import com.mroldl001.mimochat.data.preferences.PreferencesManager
 import com.mroldl001.mimochat.ui.AppNavigation
+import com.mroldl001.mimochat.ui.chat.components.CodeFullscreenOverlayProvider
 import com.mroldl001.mimochat.ui.chat.components.ExpandedChatMinWidth
 import com.mroldl001.mimochat.ui.theme.MIMOChatTheme
 import com.mroldl001.mimochat.ui.theme.ThemeColor
@@ -178,61 +179,63 @@ private fun MainContent(
     
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isExpandedScreen = this.maxWidth >= ExpandedChatMinWidth
-        // 别再包一层
-        MIMOChatTheme(
-            themeColor = themeColor,
-            themeMode = themeMode,
-            customColorHex = customThemeColorHex,
-            codeBlockColorMode = codeBlockColorMode
-        ) {
-            // 防露黑边
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
+            // 别再包一层
+            MIMOChatTheme(
+                themeColor = themeColor,
+                themeMode = themeMode,
+                customColorHex = customThemeColorHex,
+                codeBlockColorMode = codeBlockColorMode
             ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            alpha = 1f - langSwitchProgress.value
-                            translationX = -size.width * 0.33f * langSwitchProgress.value
-                        },
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    AppNavigation(
-                        isExpandedScreen = isExpandedScreen,
-                    initialChatId = initialChatId,
-                    preferencesManager = viewModel.preferencesManager,
-                    appLanguage = appLanguage,
-                    onLanguageSelected = { code ->
-                        viewModel.preferencesManager.saveAppLanguage(code)
-                        scope.launch {
-                            langSwitchProgress.animateTo(
-                                1f,
-                                animationSpec = tween(durationMillis = 300)
+                CodeFullscreenOverlayProvider {
+                    // 防露黑边
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    alpha = 1f - langSwitchProgress.value
+                                    translationX = -size.width * 0.33f * langSwitchProgress.value
+                                },
+                            color = MaterialTheme.colorScheme.background
+                        ) {
+                            AppNavigation(
+                                isExpandedScreen = isExpandedScreen,
+                                initialChatId = initialChatId,
+                                preferencesManager = viewModel.preferencesManager,
+                                appLanguage = appLanguage,
+                                onLanguageSelected = { code ->
+                                    viewModel.preferencesManager.saveAppLanguage(code)
+                                    scope.launch {
+                                        langSwitchProgress.animateTo(
+                                            1f,
+                                            animationSpec = tween(durationMillis = 300)
+                                        )
+                                        activity?.recreate()
+                                    }
+                                },
+                                onThemeChanged = { newColor, newMode ->
+                                    themeColor = newColor
+                                    themeMode = newMode
+                                    if (newColor == ThemeColor.CUSTOM) {
+                                        customThemeColorHex = viewModel.preferencesManager.getCustomThemeColorHex()
+                                    }
+                                },
+                                onCodeBlockColorModeChanged = { mode ->
+                                    codeBlockColorMode = mode
+                                    viewModel.preferencesManager.saveCodeBlockColorMode(mode)
+                                },
+                                onNavigateFromSearch = onNavigateFromSearch,
+                                onNavigateFromDrawer = onNavigateFromDrawer,
+                                onBackToChat = { onBackToChat = it }
                             )
-                            activity?.recreate()
                         }
-                    },
-                    onThemeChanged = { newColor, newMode ->
-                        themeColor = newColor
-                        themeMode = newMode
-                        if (newColor == ThemeColor.CUSTOM) {
-                            customThemeColorHex = viewModel.preferencesManager.getCustomThemeColorHex()
-                        }
-                    },
-                    onCodeBlockColorModeChanged = { mode ->
-                        codeBlockColorMode = mode
-                        viewModel.preferencesManager.saveCodeBlockColorMode(mode)
-                    },
-                    onNavigateFromSearch = onNavigateFromSearch,
-                    onNavigateFromDrawer = onNavigateFromDrawer,
-                    onBackToChat = { onBackToChat = it }
-                )
+                    }
                 }
             }
-        }
     }
 }
 
